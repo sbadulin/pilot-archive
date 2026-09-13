@@ -38,6 +38,7 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.SELECTEL_ACCESS_KEY }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.SELECTEL_SECRET_KEY }}
       AWS_DEFAULT_REGION: ${{ vars.SELECTEL_REGION }}
+      AWS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
       AWS_EC2_METADATA_DISABLED: 'true'
       SELECTEL_ENDPOINT: ${{ vars.SELECTEL_ENDPOINT }}
       SELECTEL_PUBLIC_BUCKET: ${{ vars.SELECTEL_PUBLIC_BUCKET }}
