@@ -1,10 +1,12 @@
+import { readdirSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 
 test('archive reads restored PDF with local worker and navigates every view', async ({ page }) => {
   const remote: string[] = [];
+  const expectedIssues = readdirSync('archive-data/archive/2000', { withFileTypes: true }).filter(entry => entry.isDirectory()).length;
   page.on('request', request => { if (!request.url().startsWith('http://127.0.0.1:4183') && !request.url().startsWith('data:')) remote.push(request.url()); });
   await page.goto('/');
-  await expect.poll(() => page.locator('.issue-card').count()).toBeGreaterThan(7);
+  await expect.poll(() => page.locator('.issue-card').count()).toBe(expectedIssues);
   await page.locator('.cover-button').first().click();
   await expect(page.locator('.sheet-inner canvas')).toBeVisible();
   await expect.poll(() => page.locator('.sheet-inner canvas').evaluate((c: HTMLCanvasElement) => c.width)).toBeGreaterThan(100);
