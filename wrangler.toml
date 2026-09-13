@@ -1,0 +1,12 @@
+name = "pilot-archive"
+compatibility_date = "2026-09-08"
+pages_build_output_dir = "dist-admin"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "pilot_archive"
+database_id = "634d6382-b3e0-419e-a4e2-d7d0487229d5"
+
+[[r2_buckets]]
+binding = "ISSUES_BUCKET"
+bucket_name = "pilot-archive-issues"

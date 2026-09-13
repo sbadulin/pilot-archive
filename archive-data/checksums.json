@@ -1,0 +1,66 @@
+[
+  {
+    "id": 1,
+    "year": 2000,
+    "slug": "issue-01-0066",
+    "filename": "ПП №01(0066)-5.01.2000.pdf",
+    "bytes": 6176150,
+    "sha256": "93c78aa93a3e55c7327998eb927e3ec1dae8b06ac18a1091b1e7a0b4de072e70"
+  },
+  {
+    "id": 2,
+    "year": 2000,
+    "slug": "issue-02-0067",
+    "filename": "ПП №02(0067)-12.01.2000.pdf",
+    "bytes": 6368097,
+    "sha256": "ebbe313dc713d5e29f481426c97cc97bad3e2a6d65584dcb17fc67f8e1dbc7e1"
+  },
+  {
+    "id": 5,
+    "year": 2000,
+    "slug": "issue-03-0068",
+    "filename": "ПП №03(0068)-19.01.2000.pdf",
+    "bytes": 6560131,
+    "sha256": "296ced29ff1ecae94728d2e0cc8d4e619b8fbea06c6fba9cf23c9eaa3c616b3f"
+  },
+  {
+    "id": 6,
+    "year": 2000,
+    "slug": "issue-04-0069",
+    "filename": "ПП №04(0069)-26.01.2000.pdf",
+    "bytes": 6424511,
+    "sha256": "df952c356a7aab798625519c3b6612f73476278c3bbe8b589ed7e616d6b72c9c"
+  },
+  {
+    "id": 7,
+    "year": 2000,
+    "slug": "issue-05-0070",
+    "filename": "ПП №05(0070)-02.02.2000.pdf",
+    "bytes": 6232251,
+    "sha256": "9f3e35a073b622c1abc25b4e858e1543ad1bce45ce867d212b837de4b6f878f1"
+  },
+  {
+    "id": 8,
+    "year": 2000,
+    "slug": "issue-06-0071",
+    "filename": "ПП №06(0071)-09.02.2000.pdf",
+    "bytes": 6553022,
+    "sha256": "f696837badbdbe6c07a016a6e9983fe00540a7052170cb9036d2b21df4108668"
+  },
+  {
+    "id": 3,
+    "year": 2000,
+    "slug": "issue-13-0078",
+    "filename": "пилот (1).pdf",
+    "bytes": 8181561,
+    "sha256": "00baaef85d3df5abf0fee05fcefae335de5d1969042afecdf99dbec4fa4a2fa1"
+  },
+  {
+    "id": 4,
+    "year": 2002,
+    "slug": "issue-32-0201",
+    "filename": "2026.06.07_PP0201_2002.12.pdf",
+    "bytes": 13849498,
+    "sha256": "25204a08c87da6f81529953e691e18362d1e75764c2f1ebf8acef52ac7d5f3ff"
+  }
+]

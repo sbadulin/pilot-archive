@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env*
+.DS_Store
+dist-admin/
+.wrangler/
+backups/
+*.log
+test-results/
+playwright-report/
