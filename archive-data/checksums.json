@@ -48,6 +48,38 @@
     "sha256": "f696837badbdbe6c07a016a6e9983fe00540a7052170cb9036d2b21df4108668"
   },
   {
+    "id": 9,
+    "year": 2000,
+    "slug": "issue-07-0072",
+    "filename": "ПП №07(0072)-16.02.2000.pdf",
+    "bytes": 6601937,
+    "sha256": "1412f694b32c8664ff94c3e1d058ebc45881e5c9bd1728882d4c9cb75390f5e7"
+  },
+  {
+    "id": 10,
+    "year": 2000,
+    "slug": "issue-08-0073",
+    "filename": "ПП №08(0073)-23.02.2000.pdf",
+    "bytes": 6487282,
+    "sha256": "d561f2c9afcbb984411b8cffefa6f18cfdbae18015ffa3789963e18e2639db9b"
+  },
+  {
+    "id": 11,
+    "year": 2000,
+    "slug": "issue-09-0074",
+    "filename": "ПП №09(0074)-01.03.2000.pdf",
+    "bytes": 8254689,
+    "sha256": "f1483a964a22dac4558f8c33fea2b4843183dc80147967e8428523e3d8f7b57e"
+  },
+  {
+    "id": 12,
+    "year": 2000,
+    "slug": "issue-10-0075",
+    "filename": "ПП №10(0075)-08.03.2000.pdf",
+    "bytes": 8254367,
+    "sha256": "6ec7b2af249718ed84cc46e4731461282a1d20b8f1f0618e3384ffd09f838bcf"
+  },
+  {
     "id": 3,
     "year": 2000,
     "slug": "issue-13-0078",

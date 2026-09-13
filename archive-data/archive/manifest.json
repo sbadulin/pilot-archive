@@ -80,6 +80,58 @@
       "coverUrl": "/archive/2000/issue-06-0071/cover.jpg"
     },
     {
+      "id": 9,
+      "year": 2000,
+      "slug": "issue-07-0072",
+      "number": "07",
+      "serial": "0072",
+      "date": "2000-02-16",
+      "dateLabel": "16 февраля 2000",
+      "pages": 15,
+      "filename": "ПП №07(0072)-16.02.2000.pdf",
+      "pdfUrl": "/archive/2000/issue-07-0072/issue.pdf",
+      "coverUrl": "/archive/2000/issue-07-0072/cover.jpg"
+    },
+    {
+      "id": 10,
+      "year": 2000,
+      "slug": "issue-08-0073",
+      "number": "08",
+      "serial": "0073",
+      "date": "2000-02-23",
+      "dateLabel": "23 февраля 2000",
+      "pages": 15,
+      "filename": "ПП №08(0073)-23.02.2000.pdf",
+      "pdfUrl": "/archive/2000/issue-08-0073/issue.pdf",
+      "coverUrl": "/archive/2000/issue-08-0073/cover.jpg"
+    },
+    {
+      "id": 11,
+      "year": 2000,
+      "slug": "issue-09-0074",
+      "number": "09",
+      "serial": "0074",
+      "date": "2000-03-01",
+      "dateLabel": "1 марта 2000",
+      "pages": 19,
+      "filename": "ПП №09(0074)-01.03.2000.pdf",
+      "pdfUrl": "/archive/2000/issue-09-0074/issue.pdf",
+      "coverUrl": "/archive/2000/issue-09-0074/cover.jpg"
+    },
+    {
+      "id": 12,
+      "year": 2000,
+      "slug": "issue-10-0075",
+      "number": "10",
+      "serial": "0075",
+      "date": "2000-03-08",
+      "dateLabel": "8 марта 2000",
+      "pages": 19,
+      "filename": "ПП №10(0075)-08.03.2000.pdf",
+      "pdfUrl": "/archive/2000/issue-10-0075/issue.pdf",
+      "coverUrl": "/archive/2000/issue-10-0075/cover.jpg"
+    },
+    {
       "id": 3,
       "year": 2000,
       "slug": "issue-13-0078",
