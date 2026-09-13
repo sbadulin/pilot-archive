@@ -1,0 +1,11 @@
+# Set S3_PUBLIC_HOST to the PUBLIC bucket hostname from Selectel, without https://.
+# Main domain is served here because Selectel S3/CDN does not accept an apex domain.
+pilot-archive.ru {
+    encode zstd gzip
+    header Access-Control-Allow-Origin https://pilot-archive.pages.dev
+    @root path /
+    rewrite @root /index.html
+    reverse_proxy https://{$S3_PUBLIC_HOST} {
+        header_up Host {$S3_PUBLIC_HOST}
+    }
+}

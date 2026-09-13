@@ -1,0 +1,71 @@
+name: Deploy production
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: production
+  cancel-in-progress: false
+jobs:
+  check:
+    name: Verify release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - run: npm run check
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-build
+          path: dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: admin-build
+          path: dist-admin/
+  selectel:
+    name: Publish public frontend
+    needs: check
+    runs-on: ubuntu-latest
+    environment: selectel-production
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.SELECTEL_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.SELECTEL_SECRET_KEY }}
+      AWS_DEFAULT_REGION: ${{ vars.SELECTEL_REGION }}
+      AWS_EC2_METADATA_DISABLED: 'true'
+      SELECTEL_ENDPOINT: ${{ vars.SELECTEL_ENDPOINT }}
+      SELECTEL_PUBLIC_BUCKET: ${{ vars.SELECTEL_PUBLIC_BUCKET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: public-build
+          path: dist
+      - name: Upload immutable assets, then entrypoints
+        run: bash scripts/deploy-selectel.sh
+  cloudflare:
+    name: Publish Pages admin
+    needs: check
+    runs-on: ubuntu-latest
+    environment: cloudflare-production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm install
+      - uses: actions/download-artifact@v4
+        with:
+          name: admin-build
+          path: dist-admin
+      - run: npx wrangler pages deploy dist-admin --project-name pilot-archive --branch main --commit-dirty=true
