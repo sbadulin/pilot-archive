@@ -36,12 +36,23 @@ test('year deep link and mobile layout remain usable', async ({ page }) => {
 });
 
 test('public host navigates to Pages login rather than fetching protected API', async ({ page, request }) => {
+  const protectedRequests: string[] = [];
+  page.on('request', req => {
+    if (req.resourceType() === 'fetch' && new URL(req.url()).pathname.startsWith('/api/admin/')) {
+      protectedRequests.push(req.url());
+    }
+  });
   await page.route('http://pilot-archive.test/**', async route => {
     const url = new URL(route.request().url());
     await route.fulfill({ response: await request.get(`http://127.0.0.1:4183${url.pathname}${url.search}`) });
   });
-  await page.route('https://pilot-archive.pages.dev/api/admin/login', route => route.fulfill({ contentType: 'text/html', body: 'Вход в архив' }));
   await page.goto('http://pilot-archive.test/');
+  await expect(page.locator('.header-add')).toBeVisible();
+  // Finish archive and module requests before navigation can cancel their routes.
+  await page.waitForLoadState('networkidle');
+  await page.unrouteAll({ behavior: 'wait' });
+  await page.route('https://pilot-archive.pages.dev/api/admin/login', route => route.fulfill({ contentType: 'text/html', body: 'Вход в архив' }));
   await page.locator('.header-add').click();
   await expect(page).toHaveURL('https://pilot-archive.pages.dev/api/admin/login');
+  expect(protectedRequests).toEqual([]);
 });

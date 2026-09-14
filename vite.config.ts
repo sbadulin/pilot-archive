@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { readFile } from 'node:fs/promises';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { resolve, sep } from 'node:path';
 
 export default defineConfig({
@@ -30,7 +32,7 @@ export default defineConfig({
       server.middlewares.use('/archive/', async (req, res, next) => {
         try {
           const requestPath = (req.url || '').split('?')[0];
-          if (requestPath === '/archive/manifest.json') {
+          if (requestPath === '/manifest.json') {
             const body = await readFile(resolve('archive-catalog/manifest.json'));
             res.setHeader('Content-Type', 'application/json');
             res.setHeader('Cache-Control', 'no-cache');
@@ -38,14 +40,21 @@ export default defineConfig({
             return;
           }
           const origin = process.env.PUBLIC_ARCHIVE_ORIGIN || 'https://pilot-archive.ru';
-          const upstream = await fetch(`${origin}${req.url || ''}`, { headers: req.headers.range ? { range: req.headers.range } : undefined });
+          const upstream = await fetch(`${origin.replace(/\/$/, '')}/archive${req.url || '/'}`, { headers: req.headers.range ? { range: req.headers.range } : undefined });
           res.statusCode = upstream.status;
           for (const header of ['content-type', 'content-length', 'content-range', 'accept-ranges', 'cache-control', 'etag']) {
             const value = upstream.headers.get(header);
             if (value) res.setHeader(header, value);
           }
-          res.end(Buffer.from(await upstream.arrayBuffer()));
-        } catch { next(); }
+          if (upstream.body) {
+            await pipeline(Readable.fromWeb(upstream.body as import('node:stream/web').ReadableStream), res);
+          } else res.end();
+        } catch (error) {
+          if (!res.destroyed && !res.headersSent) {
+            res.statusCode = 502;
+            res.end('Archive upstream unavailable');
+          }
+        }
       });
     },
   }],
