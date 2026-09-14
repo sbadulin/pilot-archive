@@ -109,7 +109,7 @@ npm run dev
 Первичная загрузка восьми восстановленных выпусков (AWS CLI, endpoint и ключи настроены в окружении):
 
 ```sh
-aws --endpoint-url "$SELECTEL_ENDPOINT" s3 sync archive-data/archive/ "s3://$SELECTEL_PUBLIC_BUCKET/archive/" --exclude manifest.json
+Публичный архив уже находится в Selectel S3; новые выпуски публикуются backend-функцией после одобрения. Локальные PDF не являются источником production-каталога.
 ```
 
 `manifest.json` публиковать отдельно после объединения с уже одобренными выпусками D1. Локальный manifest — исходный каталог для разработки, а не источник для перезаписи живого каталога.

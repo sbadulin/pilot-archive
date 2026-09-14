@@ -1,9 +1,9 @@
-import { readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 
 test('archive reads restored PDF with local worker and navigates every view', async ({ page }) => {
   const remote: string[] = [];
-  const expectedIssues = readdirSync('archive-data/archive/2000', { withFileTypes: true }).filter(entry => entry.isDirectory()).length;
+  const expectedIssues = JSON.parse(readFileSync('archive-catalog/manifest.json', 'utf8')).issues.filter((issue: { year: number }) => issue.year === 2000).length;
   page.on('request', request => { if (!request.url().startsWith('http://127.0.0.1:4183') && !request.url().startsWith('data:')) remote.push(request.url()); });
   await page.goto('/');
   await expect.poll(() => page.locator('.issue-card').count()).toBe(expectedIssues);

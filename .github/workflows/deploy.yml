@@ -48,16 +48,6 @@ jobs:
         with:
           name: public-build
           path: dist
-      - name: Upload archive files and manifest
-        run: |
-          aws --endpoint-url "$SELECTEL_ENDPOINT" s3 sync archive-data/archive/ "s3://$SELECTEL_PUBLIC_BUCKET/archive/" \
-            --exclude manifest.json \
-            --cache-control 'public,max-age=31536000,immutable' \
-            --only-show-errors
-          aws --endpoint-url "$SELECTEL_ENDPOINT" s3 cp archive-data/archive/manifest.json "s3://$SELECTEL_PUBLIC_BUCKET/archive/manifest.json" \
-            --content-type 'application/json' \
-            --cache-control 'no-cache' \
-            --only-show-errors
       - name: Upload immutable assets, then entrypoints
         run: bash scripts/deploy-selectel.sh
   cloudflare:

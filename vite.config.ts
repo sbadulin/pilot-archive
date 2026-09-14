@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [react(), {
     name: 'local-archive-and-pdf-assets',
     configureServer(server) {
-      for (const [prefix, folder] of [['/archive/', 'archive-data/archive'], ['/pdfjs/', 'node_modules/pdfjs-dist']] as const) {
+      for (const [prefix, folder] of [['/pdfjs/', 'node_modules/pdfjs-dist']] as const) {
         server.middlewares.use(prefix, async (req, res, next) => {
           try {
             const suffix = decodeURIComponent((req.url || '').split('?')[0]).replace(/^\//, '');
@@ -27,6 +27,26 @@ export default defineConfig({
           } catch { next(); }
         });
       }
+      server.middlewares.use('/archive/', async (req, res, next) => {
+        try {
+          const requestPath = (req.url || '').split('?')[0];
+          if (requestPath === '/archive/manifest.json') {
+            const body = await readFile(resolve('archive-catalog/manifest.json'));
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.end(body);
+            return;
+          }
+          const origin = process.env.PUBLIC_ARCHIVE_ORIGIN || 'https://pilot-archive.ru';
+          const upstream = await fetch(`${origin}${req.url || ''}`, { headers: req.headers.range ? { range: req.headers.range } : undefined });
+          res.statusCode = upstream.status;
+          for (const header of ['content-type', 'content-length', 'content-range', 'accept-ranges', 'cache-control', 'etag']) {
+            const value = upstream.headers.get(header);
+            if (value) res.setHeader(header, value);
+          }
+          res.end(Buffer.from(await upstream.arrayBuffer()));
+        } catch { next(); }
+      });
     },
   }],
   server: { host: '127.0.0.1', port: 4173, strictPort: true },
