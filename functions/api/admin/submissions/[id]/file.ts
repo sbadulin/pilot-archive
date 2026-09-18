@@ -1,18 +1,23 @@
 import { requireCurator, requireSubmitter, json } from '../../../_lib/auth';
-import { selectelUrl, storageMode } from '../../../_lib/selectel';
+import { selectelPublicBucket, selectelUrl, storageMode } from '../../../_lib/selectel';
+import { archiveKey } from '../../../_lib/validation';
 
 export async function onRequestGet(context: any) {
   const user = requireCurator(context);
   if (user instanceof Response) return user;
   if (!context.env.DB) return json({ error: 'D1 ещё не подключён.' }, { status: 503 });
-  const row = await context.env.DB.prepare(`SELECT storage_key AS storageKey, filename, status FROM issue_submissions WHERE id = ?`).bind(context.params.id).first();
+  const row = await context.env.DB.prepare(`SELECT id, year, number, serial, storage_key AS storageKey, filename, status FROM issue_submissions WHERE id = ?`).bind(context.params.id).first();
   if (!row) return json({ error: 'Заявка не найдена.' }, { status: 404 });
   const mode = storageMode(context.env);
+  const approved = row.status === 'approved';
   const key = mode === 'selectel'
-    ? `${row.status === 'rejected' ? 'rejected' : row.status === 'approved' ? 'published' : 'pending'}/${row.storageKey}`
+    ? approved
+      ? archiveKey(row.year, row.number, row.serial, row.id)
+      : `${row.status === 'rejected' ? 'rejected' : 'pending'}/${row.storageKey}`
     : row.storageKey;
   if (mode === 'selectel') {
-    const url = await selectelUrl(context.env, key, 'GET');
+    // Approved issues live in the public bucket alongside the migrated archive.
+    const url = await selectelUrl(context.env, key, 'GET', 900, approved ? selectelPublicBucket(context.env) : undefined);
     if (!url) return json({ error: 'Selectel S3 не настроен.' }, { status: 503 });
     const response = await fetch(url);
     if (!response.ok) return json({ error: 'PDF заявки не найден.' }, { status: response.status === 404 ? 404 : 502 });

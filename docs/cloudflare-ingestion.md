@@ -67,15 +67,21 @@ printf '%s' 'ru-3' | wrangler pages secret put SELECTEL_S3_REGION --project-name
 
 На приватном бакете Selectel нужно разрешить CORS для `https://pilot-archive.ru` и `https://pilot-archive.pages.dev`, методы `GET`, `HEAD`, `PUT`, заголовок `Content-Type`. Постоянные ключи S3 в браузер не попадают.
 
-Объекты заявки и JPEG-миниатюра обложки размещаются в `pending/`. После одобрения API переносит их в `published/`, обновляет `archive/manifest.json`, после отклонения — в `rejected/`. Для `rejected/` рекомендуется включить в Selectel lifecycle-правило удаления через 7 дней.
+Объекты заявки и JPEG-миниатюра обложки размещаются в `pending/` приватного бакета. После одобрения API копирует их в публичный бакет, в то же дерево `archive/<год>/issue-NN-SSSS/`, где лежат мигрированные оригиналы: PDF как `issue-<id заявки>.pdf`, обложка как `cover-<id заявки>.jpg`. Идентификатор заявки в имени не даёт переизданию затереть оригинал. После отклонения объекты уезжают в `rejected/` приватного бакета; для `rejected/` рекомендуется включить в Selectel lifecycle-правило удаления через 7 дней.
 
-Для обновления российской витрины задайте публичный адрес корня Selectel CDN. После одобрения API запишет туда `archive/manifest.json` и положит PDF в `published/`:
+Разделение на проверенное и непроверенное обеспечивает бакет, а не префикс: `pending/` и `rejected/` живут только в приватном бакете и наружу не видны. Отдельного префикса `published/` больше нет — в публичном бакете он ничего не охранял и лишь дробил архив на два дерева.
+
+`archive/manifest.json` — единственный каталог витрины. Он всегда собирается как `archive-catalog/manifest.json` плюс одобренные заявки поверх, по ключу год/номер/сквозной номер: пересборка только из таблицы заявок стёрла бы весь мигрированный архив.
+
+Для обновления российской витрины задайте публичный адрес корня Selectel CDN. После одобрения API запишет туда `archive/manifest.json` и положит PDF в `archive/`:
 
 ```bash
 printf '%s' 'https://pilot-archive.ru' | wrangler pages secret put SELECTEL_PUBLIC_BASE_URL --project-name pilot-archive
 ```
 
-В бакете или CDN должны быть доступны `archive/manifest.json` и объекты `published/**` на чтение. `pending/**` и `rejected/**` должны оставаться закрытыми.
+В публичном бакете или CDN должны быть доступны на чтение `archive/manifest.json` и объекты `archive/**`. `pending/**` и `rejected/**` остаются в приватном бакете и наружу не публикуются.
+
+Перенос ранее опубликованных заявок из старого дерева `published/submissions/**` выполняется один раз: `npm run archive:migrate -- --apply`, затем `npm run manifest:rebuild -- --apply`, затем `npm run archive:migrate -- --cleanup`. Копирование идёт перед удалением, поэтому выпуски остаются доступны на всём протяжении переноса.
 
 При размещении фронтенда в Selectel замените значение в `dist/runtime-config.js`:
 

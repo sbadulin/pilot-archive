@@ -14,6 +14,9 @@
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "verify:archive": "node scripts/verify-archive.mjs",
+    "catalog:generate": "node scripts/generate-base-catalog.mjs",
+    "manifest:rebuild": "node --experimental-strip-types scripts/rebuild-manifest.mjs",
+    "archive:migrate": "node --experimental-strip-types scripts/migrate-published-to-archive.mjs",
     "build:all": "npm run build && npm run build:admin",
     "check": "npm run typecheck && npm test && npm run verify:archive && npm run build:all && node scripts/verify-build.mjs",
     "test:browser": "playwright test"
