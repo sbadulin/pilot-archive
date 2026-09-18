@@ -1,3 +1,6 @@
+// Explicit extension: tests load this module directly through Node's type stripping.
+import { archiveCoverKey, archiveKey, issueSlug } from './validation.ts';
+
 export type CatalogIssue = {
   id: number | string;
   year: number;
@@ -22,7 +25,6 @@ export type SubmissionRow = {
   dateLabel: string;
   pages: number;
   filename: string;
-  storageKey: string;
 };
 
 const identity = (issue: { year: number; number: string; serial: string }) => `${Number(issue.year)}/${Number(issue.number)}/${Number(issue.serial)}`;
@@ -32,7 +34,7 @@ export function submissionIssue(row: SubmissionRow, publicBase: string): Catalog
   return {
     id: row.id,
     year: row.year,
-    slug: `submission-${row.id}`,
+    slug: issueSlug(row.number, row.serial),
     number: row.number,
     serial: row.serial,
     date: row.date,
@@ -40,8 +42,8 @@ export function submissionIssue(row: SubmissionRow, publicBase: string): Catalog
     pages: row.pages,
     filename: row.filename,
     source: 'submission',
-    pdfUrl: `${base}/published/${row.storageKey}`,
-    coverUrl: `${base}/published/${row.storageKey}.cover.jpg`,
+    pdfUrl: `${base}/${archiveKey(row.year, row.number, row.serial, row.id)}`,
+    coverUrl: `${base}/${archiveCoverKey(row.year, row.number, row.serial, row.id)}`,
   };
 }
 

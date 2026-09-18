@@ -1,32 +1,43 @@
-// Rebuilds archive/manifest.json as the migrated archive plus every already published
-// submission, and writes it to the path given as the first argument (default manifest.rebuilt.json).
+// Rebuilds archive/manifest.json as the migrated archive catalog plus every already
+// published submission, with all URLs recomputed into the canonical archive layout.
+// Use it to repair a manifest, or after moving objects with archive:migrate.
 //
-//   node scripts/rebuild-manifest.mjs [output] [--live https://pilot-archive.ru/archive/manifest.json]
+//   npm run manifest:rebuild                    # writes manifest.rebuilt.json, uploads nothing
+//   npm run manifest:rebuild -- --apply         # also uploads it to the public bucket
 //
-// Upload the result with:
-//   aws --endpoint-url "$SELECTEL_ENDPOINT" s3 cp <output> "s3://$SELECTEL_PUBLIC_BUCKET/archive/manifest.json" \
-//     --content-type application/json --cache-control no-cache
+// --apply needs SELECTEL_ENDPOINT, SELECTEL_PUBLIC_BUCKET and the AWS_* credentials.
+import { execFileSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
+import { composeManifest } from '../functions/api/_lib/manifest.ts';
+import { baseCatalog } from '../functions/api/_lib/baseCatalog.ts';
 
 const args = process.argv.slice(2);
-const liveFlag = args.indexOf('--live');
-const liveUrl = liveFlag === -1 ? 'https://pilot-archive.ru/archive/manifest.json' : args[liveFlag + 1];
-const output = args.find(arg => !arg.startsWith('--') && arg !== liveUrl) ?? 'manifest.rebuilt.json';
+const apply = args.includes('--apply');
+const output = args.find(arg => !arg.startsWith('--')) ?? 'manifest.rebuilt.json';
+const endpoint = process.env.SELECTEL_ENDPOINT;
+const bucket = process.env.SELECTEL_PUBLIC_BUCKET;
+const publicBase = (process.env.SELECTEL_PUBLIC_BASE_URL ?? 'https://pilot-archive.ru').replace(/\/$/, '');
+const liveUrl = process.env.PILOT_MANIFEST_URL ?? `${publicBase}/archive/manifest.json`;
+if (apply && (!endpoint || !bucket)) throw new Error('Set SELECTEL_ENDPOINT and SELECTEL_PUBLIC_BUCKET');
 
-const base = (JSON.parse(await readFile('archive-catalog/manifest.json', 'utf8')).issues ?? []);
-if (base.length === 0) throw new Error('Archive catalog is empty');
+const catalog = JSON.parse(await readFile('archive-catalog/manifest.json', 'utf8')).issues ?? [];
+if (catalog.length !== baseCatalog.length) throw new Error('Run scripts/generate-base-catalog.mjs: the generated base catalog is stale');
 
 const response = await fetch(liveUrl, { cache: 'no-store' });
 if (!response.ok) throw new Error(`Live manifest unavailable: HTTP ${response.status}`);
 const live = await response.json();
-const published = (live.issues ?? []).filter(issue => issue.source === 'submission');
 if (!Array.isArray(live.issues)) throw new Error('Live manifest has no issues array');
+const submissions = live.issues.filter(issue => issue.source === 'submission');
 
-const identity = issue => `${Number(issue.year)}/${Number(issue.number)}/${Number(issue.serial)}`;
-const merged = new Map(base.map(issue => [identity(issue), issue]));
-for (const issue of published) merged.set(identity(issue), issue);
-const issues = [...merged.values()].sort((a, b) => a.date.localeCompare(b.date) || Number(a.number) - Number(b.number));
+const manifest = composeManifest(baseCatalog, submissions, publicBase);
+await writeFile(output, `${JSON.stringify(manifest, null, 2)}\n`);
+console.log(`Live manifest had ${live.issues.length} issues (${submissions.length} from submissions).`);
+console.log(`Wrote ${output} with ${manifest.issues.length} issues: ${manifest.issues.map(i => `${i.year}/${i.number}`).join(', ')}`);
 
-await writeFile(output, `${JSON.stringify({ version: Date.now(), issues }, null, 2)}\n`);
-console.log(`Live manifest had ${live.issues.length} issues (${published.length} from submissions).`);
-console.log(`Wrote ${output} with ${issues.length} issues: ${issues.map(i => `${i.year}/${i.number}`).join(', ')}`);
+if (!apply) {
+  console.log('\nNothing uploaded. Re-run with --apply to publish it.');
+  process.exit(0);
+}
+execFileSync('aws', ['--endpoint-url', endpoint, 's3', 'cp', output, `s3://${bucket}/archive/manifest.json`,
+  '--content-type', 'application/json', '--cache-control', 'no-cache'], { stdio: 'inherit' });
+console.log('Published archive/manifest.json.');

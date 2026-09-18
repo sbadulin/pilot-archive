@@ -8,3 +8,4 @@ backups/
 *.log
 test-results/
 playwright-report/
+manifest.rebuilt.json
