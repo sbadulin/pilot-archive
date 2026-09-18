@@ -1,5 +1,7 @@
 import { requireCurator, json } from '../../../_lib/auth';
 import { selectelPublicBucket, selectelUrl, storageMode } from '../../../_lib/selectel';
+import { baseCatalog } from '../../../_lib/baseCatalog';
+import { composeManifest } from '../../../_lib/manifest';
 
 export async function onRequestPost(context: any) {
   const denied = requireCurator(context);
@@ -41,21 +43,8 @@ export async function onRequestPost(context: any) {
 async function updateManifest(context: any) {
   const { results } = await context.env.DB.prepare(`SELECT id, year, number, serial, date, date_label AS dateLabel, filename, pages, storage_key AS storageKey FROM issue_submissions WHERE status = 'approved' ORDER BY date ASC`).all();
   const base = String(context.env.SELECTEL_PUBLIC_BASE_URL ?? '').replace(/\/$/, '');
-  const issues = results.map((item: any) => ({
-    id: item.id,
-    year: item.year,
-    slug: `submission-${item.id}`,
-    number: item.number,
-    serial: item.serial,
-    date: item.date,
-    dateLabel: item.dateLabel,
-    pages: item.pages,
-    filename: item.filename,
-    source: 'submission',
-    pdfUrl: base ? `${base}/published/${item.storageKey}` : `/published/${item.storageKey}`,
-    coverUrl: base ? `${base}/published/${item.storageKey}.cover.jpg` : `/published/${item.storageKey}.cover.jpg`,
-  }));
+  const manifest = composeManifest(baseCatalog, results, base);
   const target = await selectelUrl(context.env, 'archive/manifest.json', 'PUT', 900, selectelPublicBucket(context.env));
   if (!target) return;
-  await fetch(target, { method: 'PUT', headers: { 'content-type': 'application/json', 'cache-control': 'no-cache' }, body: JSON.stringify({ version: Date.now(), issues }) });
+  await fetch(target, { method: 'PUT', headers: { 'content-type': 'application/json', 'cache-control': 'no-cache' }, body: JSON.stringify(manifest) });
 }
