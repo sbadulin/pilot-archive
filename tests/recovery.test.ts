@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { groupSpreads } from '../src/readerLayout.ts';
+import { groupSpreads, printedPages } from '../src/readerLayout.ts';
 import { parseFilename, validateMetadata, issues, issuePdfUrl, scanUrl } from '../src/metadata.ts';
 import { roleForEmail, canPublish } from '../src/ingestion.ts';
 
@@ -16,6 +16,21 @@ test('large sheets remain single; every page appears exactly once', () => {
     assert.deepEqual(groups.flat(), Array.from({ length: count }, (_, i) => i + 1));
     assert.ok(groups.every(group => !group.includes(8) || group.length === 1));
   }
+});
+test('large sheets hold two printed pages, shifting the numbers after them', () => {
+  const layout = printedPages(15, [10]);
+  assert.equal(layout.total, 16);
+  assert.equal(layout.label(9), '9');
+  assert.equal(layout.label(10), '10–11');
+  assert.equal(layout.label(11), '12');
+  assert.equal(layout.label(15), '16');
+  assert.equal(layout.first(11), 12);
+  assert.equal(layout.sheetFor(10), 10);
+  assert.equal(layout.sheetFor(11), 10);
+  assert.equal(layout.sheetFor(12), 11);
+  assert.equal(layout.sheetFor(99), 15);
+  assert.equal(printedPages(6).label(4), '4');
+  assert.equal(printedPages(6).total, 6);
 });
 test('all recovered issue identities and file names parse correctly', () => {
   assert.equal(issues.length, 8);

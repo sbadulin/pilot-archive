@@ -1,6 +1,6 @@
 "use client";
 
-import {useCallback, useEffect, useRef, useState} from "react";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import type {PDFDocumentProxy} from "pdfjs-dist";
 import {
   ArrowLeft,
@@ -17,7 +17,7 @@ import {
   RotateCw,
 } from "lucide-react";
 import {adminUrl, isPublicSite, manifestUrl} from "./config";
-import {groupSpreads} from "./readerLayout";
+import {groupSpreads, printedPages} from "./readerLayout";
 import {Checkbox} from "./checkbox";
 import {
   issues as staticIssues,
@@ -202,9 +202,8 @@ function Reader({
   onBack: () => void;
   initialPage?: number;
 }) {
-  const [page, setPage] = useState(
-    Math.max(1, Math.min(issue.pages, initialPage)),
-  );
+  const initialSheet = Math.max(1, Math.min(issue.pages, initialPage));
+  const [page, setPage] = useState(initialSheet);
   const [zoom, setZoom] = useState(100);
   const [rotation, setRotation] = useState(0);
   const [showPages, setShowPages] = useState(true);
@@ -217,12 +216,20 @@ function Reader({
   const [baseWidth, setBaseWidth] = useState(740);
   const viewport = useRef<HTMLDivElement>(null);
   const pageNodes = useRef<Record<number, HTMLElement | null>>({});
+  const numbering = useMemo(
+    () => printedPages(issue.pages, largePages),
+    [issue.pages, largePages],
+  );
   const goPage = useCallback(
     (next: number) => {
       const target = Math.max(1, Math.min(issue.pages, next));
       setPage(target);
       setRotation(0);
-      window.history.replaceState(null, "", `${issueRoute(issue)}-p${target}`);
+      window.history.replaceState(
+        null,
+        "",
+        `${issueRoute(issue)}-p${numbering.first(target)}`,
+      );
       if (viewMode === "sheet") viewport.current?.scrollTo(0, 0);
       else
         requestAnimationFrame(() =>
@@ -232,9 +239,11 @@ function Reader({
           }),
         );
     },
-    [issue, viewMode],
+    [issue, viewMode, numbering],
   );
   const spreadGroups = groupSpreads(issue.pages, largePages);
+  const pageCaption = (sheet: number) =>
+    `${largePages.includes(sheet) ? "Страницы" : "Страница"} ${numbering.label(sheet)}`;
   useEffect(() => {
     let disposed = false;
     let document: PDFDocumentProxy | undefined;
@@ -256,6 +265,11 @@ function Reader({
             area > typical * 1.3 ? [index + 1] : [],
           );
           setLargePages(detected);
+          // Links name printed pages, so move to the sheet that holds the linked page.
+          const linked = printedPages(result.numPages, detected).sheetFor(
+            initialPage,
+          );
+          setPage((current) => (current === initialSheet ? linked : current));
         }
       })
       .catch(() => {
@@ -343,13 +357,14 @@ function Reader({
               aria-label="Номер страницы"
               type="number"
               min={1}
-              max={issue.pages}
-              value={page}
+              max={numbering.total}
+              value={numbering.first(page)}
               onChange={(e) => {
-                if (e.target.value) goPage(Number(e.target.value));
+                if (e.target.value)
+                  goPage(numbering.sheetFor(Number(e.target.value)));
               }}
             />{" "}
-            из {issue.pages}
+            из {numbering.total}
           </label>
           <button
             className="tool-button"
@@ -433,9 +448,9 @@ function Reader({
                 {pdf ? (
                   <PdfCanvas pdf={pdf} page={n} width={110} />
                 ) : (
-                  <span className="page-placeholder">{n}</span>
+                  <span className="page-placeholder">{numbering.label(n)}</span>
                 )}
-                <span>{n === 1 ? "1 · Обложка" : `Страница ${n}`}</span>
+                <span>{n === 1 ? "1 · Обложка" : pageCaption(n)}</span>
               </button>
             ))}
           </nav>
@@ -444,11 +459,7 @@ function Reader({
           {viewMode === "sheet" && (
             <>
               <div className="sheet-info" role="status">
-                {largePages.includes(page)
-                  ? "Увеличенная страница"
-                  : page === 1
-                    ? "Обложка"
-                    : `Страница ${page}`}
+                {page === 1 ? "Обложка" : pageCaption(page)}
                 <span>Исходный PDF</span>
               </div>
               <div
@@ -480,9 +491,7 @@ function Reader({
                     key={number}
                   >
                     <figcaption>
-                      {largePages.includes(number)
-                        ? `Страница ${number} · увеличенная`
-                        : `Страница ${number}`}
+                      {pageCaption(number)}
                     </figcaption>
                     {pdf ? (
                       <PdfCanvas
