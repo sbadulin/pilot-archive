@@ -17,10 +17,13 @@ test('archive reads restored PDF with local worker and navigates every view', as
   expect(Math.abs(firstBox!.width - pairBox!.width)).toBeLessThan(3);
   await page.locator('.thumbnails .thumbnail').nth(7).click();
   await expect(page.locator('.thumbnails .thumbnail').nth(7)).toHaveAttribute('aria-current', 'page');
+  // Sheet 8 of this issue is the scanned TV-guide spread, so it carries two printed pages.
+  await expect(page.locator('.thumbnails .thumbnail').nth(7)).toContainText('Страницы 8–9');
   await expect.poll(() => page.locator('.sheet-viewport').evaluate(e => e.scrollTop)).toBeGreaterThan(400);
   await page.getByRole('button', { name: 'Лента', exact: true }).click();
+  await expect(page.locator('.thumbnails .thumbnail').nth(10)).toContainText('Страница 12');
   await page.locator('.thumbnails .thumbnail').nth(10).click();
-  await expect(page).toHaveURL(/-p11$/);
+  await expect(page).toHaveURL(/-p12$/);
   await expect.poll(() => page.locator('.sheet-viewport').evaluate(e => e.scrollTop)).toBeGreaterThan(400);
   expect(remote).toEqual([]);
 });
