@@ -17,7 +17,7 @@ import {
   RotateCw,
 } from "lucide-react";
 import {adminUrl, isPublicSite, manifestUrl} from "./config";
-import {groupSpreads} from "./readerLayout";
+import {groupSpreads, printedPages} from "./readerLayout";
 import {Checkbox} from "./checkbox";
 import {
   issues as staticIssues,
@@ -235,6 +235,9 @@ function Reader({
     [issue, viewMode],
   );
   const spreadGroups = groupSpreads(issue.pages, largePages);
+  const numbering = printedPages(issue.pages, largePages);
+  const pageCaption = (sheet: number) =>
+    `${largePages.includes(sheet) ? "Страницы" : "Страница"} ${numbering.label(sheet)}`;
   useEffect(() => {
     let disposed = false;
     let document: PDFDocumentProxy | undefined;
@@ -343,13 +346,14 @@ function Reader({
               aria-label="Номер страницы"
               type="number"
               min={1}
-              max={issue.pages}
-              value={page}
+              max={numbering.total}
+              value={numbering.first(page)}
               onChange={(e) => {
-                if (e.target.value) goPage(Number(e.target.value));
+                if (e.target.value)
+                  goPage(numbering.sheetFor(Number(e.target.value)));
               }}
             />{" "}
-            из {issue.pages}
+            из {numbering.total}
           </label>
           <button
             className="tool-button"
@@ -433,9 +437,9 @@ function Reader({
                 {pdf ? (
                   <PdfCanvas pdf={pdf} page={n} width={110} />
                 ) : (
-                  <span className="page-placeholder">{n}</span>
+                  <span className="page-placeholder">{numbering.label(n)}</span>
                 )}
-                <span>{n === 1 ? "1 · Обложка" : `Страница ${n}`}</span>
+                <span>{n === 1 ? "1 · Обложка" : pageCaption(n)}</span>
               </button>
             ))}
           </nav>
@@ -444,11 +448,7 @@ function Reader({
           {viewMode === "sheet" && (
             <>
               <div className="sheet-info" role="status">
-                {largePages.includes(page)
-                  ? "Увеличенная страница"
-                  : page === 1
-                    ? "Обложка"
-                    : `Страница ${page}`}
+                {page === 1 ? "Обложка" : pageCaption(page)}
                 <span>Исходный PDF</span>
               </div>
               <div
@@ -480,9 +480,7 @@ function Reader({
                     key={number}
                   >
                     <figcaption>
-                      {largePages.includes(number)
-                        ? `Страница ${number} · увеличенная`
-                        : `Страница ${number}`}
+                      {pageCaption(number)}
                     </figcaption>
                     {pdf ? (
                       <PdfCanvas
