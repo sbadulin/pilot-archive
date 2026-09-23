@@ -174,7 +174,7 @@ function PdfCanvas({
 }
 
 const MIN_ZOOM = 50;
-const MAX_ZOOM = 500;
+const MAX_ZOOM = 600;
 
 // Turns a two-finger pinch inside the reader into a change of `zoom`, so pages
 // are re-rendered at the new size instead of being blown up by the browser.
