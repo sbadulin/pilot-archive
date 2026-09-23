@@ -208,7 +208,7 @@ button, a { transition: background-color .15s, color .15s, border-color .15s; }
 .thumbnail span { display: block; font-size: 12px; margin-top: 7px; line-height: 1.3; }
 .thumbnail.selected { border-color: var(--ink); background: #e1e5c9; }
 .thumbnail:hover { background: #dedfd1; }
-.sheet-viewport { flex: 1; min-width: 0; overflow: auto; background: #dcded4; }
+.sheet-viewport { flex: 1; min-width: 0; overflow: auto; background: #dcded4; touch-action: pan-x pan-y; }
 .sheet-info { display: flex; justify-content: space-between; gap: 20px; padding: 16px 24px 12px; font-size: 13px; color: #53584a; position: sticky; left: 0; }
 .sheet-info span { color: #626958; }
 .sheet-inner { display: flex; justify-content: center; align-items: start; padding: 5px 24px 30px; }

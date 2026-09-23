@@ -1,6 +1,14 @@
 "use client";
 
-import {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import type {PDFDocumentProxy} from "pdfjs-dist";
 import {
   ArrowLeft,
@@ -165,6 +173,148 @@ function PdfCanvas({
   );
 }
 
+const MIN_ZOOM = 50;
+const MAX_ZOOM = 500;
+
+// Turns a two-finger pinch inside the reader into a change of `zoom`, so pages
+// are re-rendered at the new size instead of being blown up by the browser.
+// While fingers move, the layer is only CSS-scaled as a preview.
+function usePinchZoom(
+  viewport: RefObject<HTMLDivElement>,
+  layer: RefObject<HTMLDivElement>,
+  zoom: number,
+  setZoom: (zoom: number) => void,
+) {
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  // The spot that was under the fingers: a fraction of the pinched page when
+  // there is one (padding around pages does not scale), else scaled scroll.
+  const anchor = useRef<{
+    page: Element | null;
+    u: number;
+    v: number;
+    x: number;
+    y: number;
+    fx: number;
+    fy: number;
+  } | null>(null);
+  useLayoutEffect(() => {
+    const element = viewport.current;
+    const target = anchor.current;
+    if (!element || !target) return;
+    anchor.current = null;
+    if (target.page?.isConnected) {
+      const box = element.getBoundingClientRect();
+      const rect = target.page.getBoundingClientRect();
+      element.scrollLeft +=
+        rect.left + target.u * rect.width - box.left - target.fx;
+      element.scrollTop +=
+        rect.top + target.v * rect.height - box.top - target.fy;
+    } else {
+      element.scrollLeft = target.x - target.fx;
+      element.scrollTop = target.y - target.fy;
+    }
+  }, [zoom, viewport]);
+  useEffect(() => {
+    const element = viewport.current;
+    if (!element) return;
+    let gesture: {
+      distance: number;
+      scale: number;
+      x: number;
+      y: number;
+      fx: number;
+      fy: number;
+      dx: number;
+      dy: number;
+    } | null = null;
+    const measure = (touches: TouchList) => {
+      const [a, b] = [touches[0], touches[1]];
+      const rect = element.getBoundingClientRect();
+      return {
+        distance: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY),
+        fx: (a.clientX + b.clientX) / 2 - rect.left,
+        fy: (a.clientY + b.clientY) / 2 - rect.top,
+      };
+    };
+    const clampScale = (scale: number) =>
+      Math.max(
+        MIN_ZOOM / zoomRef.current,
+        Math.min(MAX_ZOOM / zoomRef.current, scale),
+      );
+    const preview = (transform: string, origin = "") => {
+      if (!layer.current) return;
+      layer.current.style.transform = transform;
+      layer.current.style.transformOrigin = origin;
+    };
+    const onStart = (event: TouchEvent) => {
+      if (event.touches.length !== 2) return;
+      event.preventDefault();
+      const start = measure(event.touches);
+      gesture = {
+        ...start,
+        scale: 1,
+        x: element.scrollLeft + start.fx,
+        y: element.scrollTop + start.fy,
+        dx: 0,
+        dy: 0,
+      };
+      preview("", `${gesture.x}px ${gesture.y}px`);
+    };
+    const onMove = (event: TouchEvent) => {
+      if (!gesture || event.touches.length !== 2) return;
+      event.preventDefault();
+      const now = measure(event.touches);
+      gesture.scale = clampScale(now.distance / gesture.distance);
+      gesture.dx = now.fx - gesture.fx;
+      gesture.dy = now.fy - gesture.fy;
+      preview(
+        `translate(${gesture.dx}px, ${gesture.dy}px) scale(${gesture.scale})`,
+        `${gesture.x}px ${gesture.y}px`,
+      );
+    };
+    const onEnd = () => {
+      if (!gesture) return;
+      const {scale, x, y, fx, fy, dx, dy} = gesture;
+      gesture = null;
+      // Measured while the preview is still applied, so the anchor is what
+      // the reader currently sees under their fingers.
+      const box = element.getBoundingClientRect();
+      const [px, py] = [box.left + fx + dx, box.top + fy + dy];
+      const page = document.elementFromPoint(px, py)?.closest(".canvas-wrap");
+      const rect = page?.getBoundingClientRect();
+      preview("");
+      const next = Math.round(zoomRef.current * scale);
+      if (next === zoomRef.current) return;
+      const ratio = next / zoomRef.current;
+      anchor.current = {
+        page: page ?? null,
+        u: rect ? (px - rect.left) / rect.width : 0,
+        v: rect ? (py - rect.top) / rect.height : 0,
+        x: x * ratio,
+        y: y * ratio,
+        fx: fx + dx,
+        fy: fy + dy,
+      };
+      setZoom(next);
+    };
+    // Older iOS Safari zooms the whole page on its own gesture events.
+    const blockGesture = (event: Event) => event.preventDefault();
+    element.addEventListener("touchstart", onStart, {passive: false});
+    element.addEventListener("touchmove", onMove, {passive: false});
+    element.addEventListener("touchend", onEnd);
+    element.addEventListener("touchcancel", onEnd);
+    element.addEventListener("gesturestart", blockGesture);
+    return () => {
+      element.removeEventListener("touchstart", onStart);
+      element.removeEventListener("touchmove", onMove);
+      element.removeEventListener("touchend", onEnd);
+      element.removeEventListener("touchcancel", onEnd);
+      element.removeEventListener("gesturestart", blockGesture);
+    };
+  }, [viewport, layer, setZoom]);
+}
+
 function dataUrlToBlob(value: string) {
   const [header, data] = value.split(",", 2);
   const bytes = Uint8Array.from(atob(data), (character) =>
@@ -215,6 +365,8 @@ function Reader({
   const [pdfError, setPdfError] = useState(false);
   const [baseWidth, setBaseWidth] = useState(740);
   const viewport = useRef<HTMLDivElement>(null);
+  const pinchLayer = useRef<HTMLDivElement>(null);
+  usePinchZoom(viewport, pinchLayer, zoom, setZoom);
   const pageNodes = useRef<Record<number, HTMLElement | null>>({});
   const numbering = useMemo(
     () => printedPages(issue.pages, largePages),
@@ -380,8 +532,8 @@ function Reader({
           <button
             className="tool-button"
             aria-label="Уменьшить"
-            disabled={zoom <= 50}
-            onClick={() => setZoom((v) => Math.max(50, v - 25))}
+            disabled={zoom <= MIN_ZOOM}
+            onClick={() => setZoom((v) => Math.max(MIN_ZOOM, v - 25))}
           >
             <Minus size={18} />
           </button>
@@ -389,8 +541,8 @@ function Reader({
           <button
             className="tool-button"
             aria-label="Увеличить"
-            disabled={zoom >= 300}
-            onClick={() => setZoom((v) => Math.min(300, v + 25))}
+            disabled={zoom >= MAX_ZOOM}
+            onClick={() => setZoom((v) => Math.min(MAX_ZOOM, v + 25))}
           >
             <Plus size={18} />
           </button>
@@ -456,6 +608,7 @@ function Reader({
           </nav>
         )}
         <div className={`sheet-viewport view-${viewMode}`} ref={viewport}>
+          <div className="pinch-layer" ref={pinchLayer}>
           {viewMode === "sheet" && (
             <>
               <div className="sheet-info" role="status">
@@ -548,6 +701,7 @@ function Reader({
               файл.
             </p>
           )}
+          </div>
         </div>
       </div>
       <footer className="reader-footer">
