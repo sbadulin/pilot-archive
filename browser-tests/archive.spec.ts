@@ -38,6 +38,31 @@ test('year deep link and mobile layout remain usable', async ({ page }) => {
   await expect(page.locator('.sheet-inner canvas')).toBeVisible();
 });
 
+test('pinch zoom on mobile re-renders the page like the zoom buttons', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const page = await context.newPage();
+  await page.goto('/#year-2000');
+  await page.locator('.cover-button').first().click();
+  const canvas = page.locator('.sheet-inner canvas');
+  await expect.poll(() => canvas.evaluate((c: HTMLCanvasElement) => c.width)).toBeGreaterThan(100);
+  const before = await canvas.evaluate((c: HTMLCanvasElement) => c.width);
+  const box = (await page.locator('.sheet-viewport').boundingBox())!;
+  const cx = box.x + box.width / 2, cy = box.y + 300;
+  const cdp = await context.newCDPSession(page);
+  const touch = (type: string, spread: number) => cdp.send('Input.dispatchTouchEvent', {
+    type,
+    touchPoints: type === 'touchEnd' ? [] : [{ x: cx - spread, y: cy, id: 1 }, { x: cx + spread, y: cy, id: 2 }],
+  });
+  await touch('touchStart', 40);
+  for (let spread = 50; spread <= 100; spread += 10) await touch('touchMove', spread);
+  await touch('touchEnd', 0);
+  await expect(page.getByLabel('Масштаб')).toHaveText('250%');
+  await expect.poll(() => canvas.evaluate((c: HTMLCanvasElement) => c.width)).toBeGreaterThan(before * 2);
+  expect(await page.locator('.pinch-layer').evaluate(e => e.style.transform)).toBe('');
+  expect(await page.evaluate(() => visualViewport!.scale)).toBe(1);
+  await context.close();
+});
+
 test('public host navigates to Pages login rather than fetching protected API', async ({ page, request }) => {
   const protectedRequests: string[] = [];
   page.on('request', req => {
