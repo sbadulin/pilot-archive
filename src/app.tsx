@@ -1673,16 +1673,19 @@ export default function Home() {
             </a>
           )}
         </nav>
-        <button
-          className="header-add"
-          onClick={() => navigate({kind: "upload"})}
-        >
-          <Plus size={18} />
-          <span>Добавить выпуск</span>
-        </button>
+        {/* Uploading lives on the admin site; the public site links there from the footer. */}
+        {__ADMIN__ && (
+          <button
+            className="header-add"
+            onClick={() => navigate({kind: "upload"})}
+          >
+            <Plus size={18} />
+            <span>Добавить выпуск</span>
+          </button>
+        )}
       </header>
       {screen.kind === "upload" ? (
-        <Upload onBack={back} />
+        __ADMIN__ ? <Upload onBack={back} /> : null
       ) : screen.kind === "authors" && isCurator ? (
         <Suspense fallback={null}>
           <CuratorAuthors issues={archiveIssues} onBack={back} />
@@ -1869,21 +1872,23 @@ export default function Home() {
                 рекламой и кроссвордами.
               </p>
             </div>
-            <aside>
-              <h3>Сохранился выпуск?</h3>
-              <p>
-                Попробуйте добавить PDF. Для этого не нужны специальные
-                программы.
-              </p>
-              <button
-                className="underlined-button"
-                onClick={() => navigate({kind: "upload"})}
-              >
-                Добавить выпуск
-                <ArrowRight size={18} />
-              </button>
-              <small>После проверки куратором выпуск появится в архиве</small>
-            </aside>
+            {__ADMIN__ && (
+              <aside>
+                <h3>Сохранился выпуск?</h3>
+                <p>
+                  Попробуйте добавить PDF. Для этого не нужны специальные
+                  программы.
+                </p>
+                <button
+                  className="underlined-button"
+                  onClick={() => navigate({kind: "upload"})}
+                >
+                  Добавить выпуск
+                  <ArrowRight size={18} />
+                </button>
+                <small>После проверки куратором выпуск появится в архиве</small>
+              </aside>
+            )}
           </section>
           <section
             className="creators-section"
@@ -1975,6 +1980,11 @@ export default function Home() {
       )}
       <footer className="site-footer shell">
         <span>Первый Пилот © Архив газеты</span>
+        {!__ADMIN__ && (
+          <a className="footer-add" href={adminUrl()}>
+            Добавить выпуск
+          </a>
+        )}
         <span>Комсомольск-на-Амуре · 1996–2007</span>
       </footer>
     </>
