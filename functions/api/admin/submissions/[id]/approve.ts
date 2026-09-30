@@ -3,7 +3,6 @@ import { selectelPublicBucket, selectelUrl, storageMode } from '../../../_lib/se
 import { baseCatalog } from '../../../_lib/baseCatalog';
 import { composeManifest } from '../../../_lib/manifest';
 import { archiveCoverKey, archiveKey } from '../../../_lib/validation';
-import { publishAuthorsIndex } from '../../../_lib/authorsPublish';
 
 export async function onRequestPost(context: any) {
   const denied = requireCurator(context);
@@ -39,10 +38,8 @@ export async function onRequestPost(context: any) {
   }
   const now = new Date().toISOString();
   await context.env.DB.prepare(`UPDATE issue_submissions SET status = 'approved', published_at = ?, updated_at = ? WHERE id = ?`).bind(now, now, row.id).run();
-  if (storageMode(context.env) === 'selectel') {
-    await updateManifest(context);
-    await publishAuthorsIndex(context);
-  }
+  // The curator's browser republishes the author search index after approval.
+  if (storageMode(context.env) === 'selectel') await updateManifest(context);
   return json({ id: row.id, status: 'approved', publishedAt: now });
 }
 

@@ -1,5 +1,4 @@
 import { requireCurator, json } from '../../_lib/auth';
-import { publishAuthorsIndex } from '../../_lib/authorsPublish';
 import { normalizeName } from '../../../../src/authorNames';
 
 // Rename every credit signed with one name. Renaming to a name that already exists merges them.
@@ -27,6 +26,5 @@ export async function onRequestPost(context: any) {
     // Renaming back to a recognized spelling leaves nothing to correct.
     db.prepare(`DELETE FROM name_fixes WHERE wrong = "right"`),
   ]);
-  const published = await publishAuthorsIndex(context);
-  return json({ updated: renamed.meta?.changes ?? 0, published: Boolean(published) });
+  return json({ updated: renamed.meta?.changes ?? 0 });
 }

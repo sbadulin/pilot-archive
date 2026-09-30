@@ -2,6 +2,7 @@ import {useCallback, useEffect, useId, useMemo, useState} from "react";
 import {ArrowLeft, Search} from "lucide-react";
 import {jsonRequest} from "./ingestionClient";
 import {matchesQuery, MIN_QUERY} from "./authorSearch";
+import {publishSearchIndex} from "./authorsPublish";
 import type {Issue} from "./metadata";
 
 type NameRow = {name: string; key: string; count: number; hidden: number};
@@ -118,16 +119,25 @@ export function CuratorAuthors({issues, onBack}: {issues: Issue[]; onBack: () =>
   );
   const existing = names?.some((row) => row.name === rename.trim() && row.name !== selected);
 
+  // Every change is followed by rebuilding the site search in this browser.
   const act = async (run: () => Promise<unknown>, done: string) => {
     setBusy(true);
     setError("");
     try {
       await run();
-      setMessage(done);
-      await loadNames();
+      setMessage(`${done} Обновляем поиск на сайте…`.trim());
+      try {
+        await publishSearchIndex();
+        setMessage(`${done} Поиск на сайте обновлён.`.trim());
+      } catch (e) {
+        setMessage(done);
+        setError(`Поиск на сайте не обновился: ${(e as Error).message}. Нажмите «Обновить поиск на сайте».`);
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      // Reload even after an error: the change may have been saved.
+      await loadNames();
       setBusy(false);
     }
   };
@@ -163,10 +173,7 @@ export function CuratorAuthors({issues, onBack}: {issues: Issue[]; onBack: () =>
         className="curator-publish"
         disabled={busy}
         onClick={() =>
-          void act(
-            () => jsonRequest<{names: number}>("/api/admin/authors/rebuild-index", {method: "POST"}),
-            "Поиск на сайте обновлён.",
-          )
+          void act(async () => undefined, "")
         }
       >
         Обновить поиск на сайте

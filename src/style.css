@@ -160,6 +160,9 @@ button, a { transition: background-color .15s, color .15s, border-color .15s; }
 .about-section h2 { font-size: 35px; line-height: 1.05; font-weight: 800; margin-top: 18px; letter-spacing: -.5px; }
 .about-section p { font-size: 16px; line-height: 1.6; }
 .about-section p + p { margin-top: 14px; color: var(--muted); }
+.about-section:not(:has(aside)) { grid-template-columns: 224px 1fr; }
+.footer-add { color: var(--muted); font-size: 13px; }
+.footer-add:hover { color: var(--ink); }
 .about-section aside { border-left: 1px solid var(--line); padding-left: 28px; }
 .about-section h3 { font-size: 24px; font-weight: 700; margin-bottom: 13px; }
 .about-section aside p { font-size: 14px; margin-bottom: 16px; }

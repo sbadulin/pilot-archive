@@ -6,6 +6,8 @@ import { pipeline } from 'node:stream/promises';
 import { resolve, sep } from 'node:path';
 
 export default defineConfig({
+  // Dev server behaves like the admin build (curator tools included).
+  define: { __ADMIN__: 'true' },
   plugins: [react(), {
     name: 'local-archive-and-pdf-assets',
     configureServer(server) {
