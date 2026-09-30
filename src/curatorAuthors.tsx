@@ -2,6 +2,7 @@ import {useCallback, useEffect, useId, useMemo, useState} from "react";
 import {ArrowLeft, Search} from "lucide-react";
 import {jsonRequest} from "./ingestionClient";
 import {matchesQuery, MIN_QUERY} from "./authorSearch";
+import type {Issue} from "./metadata";
 
 type NameRow = {name: string; key: string; count: number; hidden: number};
 type CreditRow = {
@@ -14,12 +15,70 @@ type CreditRow = {
   title: string | null;
   byline: string;
   status: "auto" | "confirmed" | "hidden";
+  source: string;
 };
 
 const KIND: Record<string, string> = {article: "статья", letter: "письмо", pager: "пейджер", photo: "фото", drawing: "рисунок", other: "другое"};
 
-// Curator page: fix misread names, merge spellings, hide wrong credits. Admin build only.
-export function CuratorAuthors({onBack}: {onBack: () => void}) {
+const issueKey = (issue: Issue) => `${issue.year}-${issue.number}-${issue.serial}`;
+
+// A byline the recognition missed. The chosen name, if any, is prefilled.
+function AddCredit({issues, names, name, busy, onAdd}: {issues: Issue[]; names: NameRow[] | null; name: string | null; busy: boolean; onAdd: (credit: Record<string, unknown>) => Promise<void>}) {
+  const id = useId();
+  const [issue, setIssue] = useState("");
+  const [page, setPage] = useState("");
+  const [author, setAuthor] = useState(name ?? "");
+  const [title, setTitle] = useState("");
+  const [kind, setKind] = useState("article");
+  useEffect(() => setAuthor(name ?? ""), [name]);
+  const chosen = issues.find((item) => issueKey(item) === issue);
+  const ready = chosen && Number(page) >= 1 && author.trim();
+  return (
+    <form
+      className="curator-add"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!chosen || !ready) return;
+        void onAdd({year: chosen.year, number: chosen.number, serial: chosen.serial, page: Number(page), name: author.trim(), title: title.trim(), kind}).then(() => {
+          setPage("");
+          setTitle("");
+        });
+      }}
+    >
+      <h2>Добавить пропущенную подпись</h2>
+      <label htmlFor={`${id}-issue`}>Номер</label>
+      <select id={`${id}-issue`} value={issue} onChange={(e) => setIssue(e.target.value)}>
+        <option value="">Выберите номер</option>
+        {issues.map((item) => (
+          <option key={issueKey(item)} value={issueKey(item)}>
+            № {item.number} ({item.serial}) · {item.dateLabel}
+          </option>
+        ))}
+      </select>
+      <label htmlFor={`${id}-page`}>Страница</label>
+      <input id={`${id}-page`} type="number" min={1} max={100} inputMode="numeric" value={page} onChange={(e) => setPage(e.target.value)} />
+      <label htmlFor={`${id}-name`}>Имя, как в подписи</label>
+      <input id={`${id}-name`} list={`${id}-names`} value={author} onChange={(e) => setAuthor(e.target.value)} />
+      <datalist id={`${id}-names`}>
+        {names?.map((row) => <option key={row.name} value={row.name} />)}
+      </datalist>
+      <label htmlFor={`${id}-title`}>Заголовок материала</label>
+      <input id={`${id}-title`} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Необязательно" />
+      <label htmlFor={`${id}-kind`}>Тип</label>
+      <select id={`${id}-kind`} value={kind} onChange={(e) => setKind(e.target.value)}>
+        <option value="article">статья</option>
+        <option value="letter">письмо</option>
+        <option value="photo">фото</option>
+        <option value="drawing">рисунок</option>
+        <option value="other">другое</option>
+      </select>
+      <button type="submit" disabled={busy || !ready}>Добавить</button>
+    </form>
+  );
+}
+
+// Curator page: fix misread names, merge spellings, hide wrong credits, add missed ones. Admin build only.
+export function CuratorAuthors({issues, onBack}: {issues: Issue[]; onBack: () => void}) {
   const listId = useId();
   const [names, setNames] = useState<NameRow[] | null>(null);
   const [query, setQuery] = useState("");
@@ -135,6 +194,18 @@ export function CuratorAuthors({onBack}: {onBack: () => void}) {
               {matches.length === 0 && <li className="author-empty">Ничего не нашли.</li>}
             </ul>
           )}
+          <AddCredit
+            issues={issues}
+            names={names}
+            name={selected}
+            busy={busy}
+            onAdd={(credit) =>
+              act(
+                () => jsonRequest("/api/admin/credits", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(credit)}),
+                `Подпись «${credit.name}» добавлена.`,
+              ).then(() => open(String(credit.name), true))
+            }
+          />
         </section>
         {selected && (
           <section className="curator-name" aria-label={`Имя ${selected}`}>
@@ -165,7 +236,10 @@ export function CuratorAuthors({onBack}: {onBack: () => void}) {
                     <a href={`#issue-${credit.year}-${credit.number}-${credit.serial}-p${credit.page}`} target="_blank" rel="noreferrer">
                       № {credit.number} ({credit.serial}) · {credit.year} · стр. {credit.page}
                     </a>
-                    <span className="curator-kind">{KIND[credit.kind] ?? credit.kind}</span>
+                    <span className="curator-kind">
+                      {KIND[credit.kind] ?? credit.kind}
+                      {credit.source.startsWith("curator:") ? " · добавлено куратором" : ""}
+                    </span>
                     <span className="author-title">{credit.title ?? "без заголовка"}</span>
                     <span className="curator-byline">Подпись: «{credit.byline}»</span>
                     <button type="button" disabled={busy} onClick={() => void setStatus(credit, credit.status === "hidden" ? "auto" : "hidden")}>

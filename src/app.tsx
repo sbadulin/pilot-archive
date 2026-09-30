@@ -1639,7 +1639,7 @@ export default function Home() {
       {screen.kind === "upload" ? (
         <Upload onBack={back} />
       ) : screen.kind === "authors" ? (
-        <CuratorAuthors onBack={back} />
+        <CuratorAuthors issues={archiveIssues} onBack={back} />
       ) : (
         <main id="main" className="shell archive-page">
           <section className="masthead">

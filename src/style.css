@@ -97,6 +97,12 @@ button, a { transition: background-color .15s, color .15s, border-color .15s; }
 .curator-names button:hover, .curator-names button.selected { background: var(--accent); }
 .curator-names .author-empty { padding: 10px 14px; }
 .curator-name h2 { margin: 0; font-size: 30px; }
+.curator-add { width: 100%; display: grid; gap: 6px; margin-top: 26px; padding-top: 16px; border-top: 5px solid var(--ink); }
+.curator-add h2 { margin: 0 0 6px; font-size: 22px; }
+.curator-add label { font-weight: 500; margin-top: 6px; }
+.curator-add input, .curator-add select { border: 1px solid var(--ink); padding: 10px 12px; font: inherit; background: #fff; color: var(--ink); min-width: 0; }
+.curator-add button { margin-top: 12px; justify-self: start; border: 1px solid var(--ink); background: var(--ink); color: var(--paper); padding: 11px 16px; font: inherit; font-weight: 500; cursor: pointer; }
+.curator-add button:disabled { opacity: .45; cursor: default; }
 .curator-rename { width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 8px 10px; align-items: center; }
 .curator-rename label { grid-column: 1 / -1; font-weight: 500; }
 .curator-rename input { min-width: 0; border: 1px solid var(--ink); padding: 11px 12px; font: inherit; background: #fff; }

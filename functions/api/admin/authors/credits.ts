@@ -8,7 +8,7 @@ export async function onRequestGet(context: any) {
   const name = new URL(context.request.url).searchParams.get('name');
   if (!name) return json({ error: 'Укажите имя.' }, { status: 400 });
   const { results } = await context.env.DB.prepare(
-    `SELECT id, issue_year AS year, issue_number AS number, issue_serial AS serial, printed_page AS page, kind, title, byline, status
+    `SELECT id, issue_year AS year, issue_number AS number, issue_serial AS serial, printed_page AS page, kind, title, byline, status, source
      FROM credits WHERE name = ? ORDER BY issue_year, issue_number, printed_page`,
   ).bind(name).all();
   return json({ credits: results });
