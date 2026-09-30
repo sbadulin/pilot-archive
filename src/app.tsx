@@ -27,6 +27,7 @@ import {
 import {adminUrl, isPublicSite, manifestUrl} from "./config";
 import {groupSpreads, printedPages} from "./readerLayout";
 import {Checkbox} from "./checkbox";
+import {AuthorSearch} from "./authorSearchView";
 import {
   issues as staticIssues,
   issuePdfUrl,
@@ -1648,6 +1649,7 @@ export default function Home() {
             </h1>
             <span>{issueCountLabel(archiveIssues.length)} в архиве</span>
           </div>
+          <AuthorSearch issues={archiveIssues} />
           <nav className="year-picker" aria-label="Выбрать год">
             {years.map((value) => (
               <a

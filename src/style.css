@@ -64,6 +64,22 @@ button, a { transition: background-color .15s, color .15s, border-color .15s; }
 .archive-title h1 { font-size: 26px; line-height: 1.15; font-weight: 700; letter-spacing: -.5px; }
 .archive-title > span { font-size: 14px; color: var(--muted); white-space: nowrap; }
 .mobile-break { display: none; }
+.author-search { margin-bottom: 28px; display: grid; gap: 10px; justify-items: start; }
+.author-search-field { width: 100%; display: flex; align-items: center; gap: 12px; border: 1px solid var(--ink); padding: 0 16px; background: #fff; }
+.author-search-field input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; padding: 14px 0; font: inherit; font-size: 17px; color: var(--ink); }
+.author-search-field:focus-within { box-shadow: 0 0 0 3px var(--accent); }
+.author-suggestions { width: 100%; list-style: none; margin: 0; padding: 0; border: 1px solid var(--ink); border-top: 0; margin-top: -10px; background: #fff; }
+.author-suggestions button { width: 100%; display: flex; justify-content: space-between; gap: 16px; padding: 12px 16px; border: 0; background: none; font: inherit; font-size: 16px; text-align: left; color: var(--ink); cursor: pointer; }
+.author-suggestions li + li button { border-top: 1px solid #e6e7dc; }
+.author-suggestions button:hover, .author-suggestions button:focus-visible { background: var(--accent); outline: 0; }
+.author-count { color: #62645a; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.author-empty { margin: 0; color: #62645a; }
+.author-credits { width: 100%; border-top: 5px solid var(--ink); padding-top: 14px; }
+.author-credits h3 { margin: 0 0 10px; font-size: 26px; }
+.author-credits ul { list-style: none; margin: 0; padding: 0; }
+.author-credits li { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 10px 0; border-bottom: 1px solid #e6e7dc; }
+.author-credits a { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+.author-title { color: #62645a; }
 .year-picker { display: grid; grid-template-columns: repeat(12, 1fr); border-block: 1px solid var(--ink); padding-block: 9px; gap: 3px; }
 .year-picker a { position: relative; border: 0; background: none; min-height: 48px; display: grid; place-items: center; color: inherit; text-decoration: none; font-family: 'Roboto Condensed', sans-serif; font-size: 21px; font-weight: 600; }
 .year-picker a:hover, .year-picker a.has-issues { background: #e6e7dc; }

@@ -10,3 +10,4 @@ test-results/
 playwright-report/
 manifest.rebuilt.json
 .authors-cache/
+archive-catalog/authors-index.json
