@@ -13,7 +13,7 @@ export function requireSubmitter(context: any) {
 
 export function requireCurator(context: any) {
   const user = identity(context);
-  if (!user.email || !canPublish(user.role)) return new Response(JSON.stringify({ error: 'Только куратор может менять статус выпуска.' }), { status: 403, headers: { 'content-type': 'application/json; charset=utf-8' } });
+  if (!user.email || !canPublish(user.role)) return new Response(JSON.stringify({ error: 'Это действие доступно только куратору.' }), { status: 403, headers: { 'content-type': 'application/json; charset=utf-8' } });
   return user;
 }
 

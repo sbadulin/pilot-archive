@@ -23,10 +23,14 @@ import {
   Minus,
   Plus,
   RotateCw,
+  Search,
+  X,
 } from "lucide-react";
 import {adminUrl, isPublicSite, manifestUrl} from "./config";
 import {groupSpreads, printedPages} from "./readerLayout";
 import {Checkbox} from "./checkbox";
+import {AuthorSearch} from "./authorSearchView";
+import {CuratorAuthors} from "./curatorAuthors";
 import {
   issues as staticIssues,
   issuePdfUrl,
@@ -41,13 +45,15 @@ import {
   loadSubmissionQueue,
   rejectSubmission,
   sendSubmission,
+  jsonRequest,
   type Submission,
 } from "./ingestionClient";
 
 type Screen =
   | {kind: "archive"}
   | {kind: "reader"; id: number | string; page?: number}
-  | {kind: "upload"};
+  | {kind: "upload"}
+  | {kind: "authors"};
 type Draft = {
   file: File;
   pdf: PDFDocumentProxy;
@@ -1458,6 +1464,15 @@ export default function Home() {
   const [screen, setScreen] = useState<Screen>({kind: "archive"});
   const [year, setYear] = useState(2000);
   const [archiveIssues, setArchiveIssues] = useState<Issue[]>(staticIssues);
+  const [searchOpen, setSearchOpen] = useState(false);
+  // Curator tools appear only for a curator signed in through Cloudflare Access.
+  const [isCurator, setIsCurator] = useState(false);
+  useEffect(() => {
+    if (isPublicSite()) return;
+    void jsonRequest<{role: string | null}>("/api/admin/whoami")
+      .then((me) => setIsCurator(me.role === "curator"))
+      .catch(() => undefined);
+  }, []);
   useEffect(() => {
     void fetch(manifestUrl(), {cache: "no-store"})
       .then((response) => (response.ok ? response.json() : null))
@@ -1530,7 +1545,9 @@ export default function Home() {
               issue.serial === issueMatch[3].padStart(4, "0"),
           )
         : undefined;
-      if (hash.startsWith("#add")) {
+      if (hash === "#authors" && !isPublicSite()) {
+        setScreen({kind: "authors"});
+      } else if (hash.startsWith("#add")) {
         if (isPublicSite()) {
           window.location.replace(adminUrl());
           return;
@@ -1614,6 +1631,14 @@ export default function Home() {
           >
             Люди
           </a>
+          {isCurator && (
+            <a
+              href="#authors"
+              className={screen.kind === "authors" ? "active" : ""}
+            >
+              Имена авторов
+            </a>
+          )}
         </nav>
         <button
           className="header-add"
@@ -1625,6 +1650,8 @@ export default function Home() {
       </header>
       {screen.kind === "upload" ? (
         <Upload onBack={back} />
+      ) : screen.kind === "authors" && isCurator ? (
+        <CuratorAuthors issues={archiveIssues} onBack={back} />
       ) : (
         <main id="main" className="shell archive-page">
           <section className="masthead">
@@ -1646,8 +1673,28 @@ export default function Home() {
               Газета осталась.
               <br className="mobile-break" /> Время можно перелистать.
             </h1>
-            <span>{issueCountLabel(archiveIssues.length)} в архиве</span>
+            <div className="archive-title-side">
+              <span>{issueCountLabel(archiveIssues.length)} в архиве</span>
+              <button
+                className="archive-search-toggle"
+                aria-expanded={searchOpen}
+                onClick={() => setSearchOpen((open) => !open)}
+              >
+                {searchOpen ? (
+                  <X size={18} aria-hidden="true" />
+                ) : (
+                  <Search size={18} aria-hidden="true" />
+                )}
+                Найти автора
+              </button>
+            </div>
           </div>
+          {searchOpen && (
+            <AuthorSearch
+              issues={archiveIssues}
+              onClose={() => setSearchOpen(false)}
+            />
+          )}
           <nav className="year-picker" aria-label="Выбрать год">
             {years.map((value) => (
               <a

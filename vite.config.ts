@@ -32,8 +32,8 @@ export default defineConfig({
       server.middlewares.use('/archive/', async (req, res, next) => {
         try {
           const requestPath = (req.url || '').split('?')[0];
-          if (requestPath === '/manifest.json') {
-            const body = await readFile(resolve('archive-catalog/manifest.json'));
+          if (requestPath === '/manifest.json' || requestPath === '/authors-index.json') {
+            const body = await readFile(resolve(`archive-catalog${requestPath}`));
             res.setHeader('Content-Type', 'application/json');
             res.setHeader('Cache-Control', 'no-cache');
             res.end(body);
