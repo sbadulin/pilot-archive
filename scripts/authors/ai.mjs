@@ -6,8 +6,15 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { recognizeSheet as recognize } from '../../functions/api/_lib/recognition.ts';
 
-const ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID || 'f8ae082199efcca3522f5735982edee9';
-const API = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/ai`;
+// The account comes from the environment or the local `wrangler login`; nothing is hardcoded.
+function accountId() {
+  if (process.env.CLOUDFLARE_ACCOUNT_ID) return process.env.CLOUDFLARE_ACCOUNT_ID;
+  const who = execFileSync('npx', ['--no-install', 'wrangler', 'whoami'], { encoding: 'utf8' });
+  const id = who.match(/\b[0-9a-f]{32}\b/)?.[0];
+  if (!id) throw new Error('Set CLOUDFLARE_ACCOUNT_ID or run `wrangler login`');
+  return id;
+}
+const API = `https://api.cloudflare.com/client/v4/accounts/${accountId()}/ai`;
 
 function token() {
   if (process.env.CLOUDFLARE_API_TOKEN) return process.env.CLOUDFLARE_API_TOKEN;
