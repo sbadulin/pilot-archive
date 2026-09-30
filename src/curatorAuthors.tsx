@@ -39,11 +39,11 @@ export function CuratorAuthors({onBack}: {onBack: () => void}) {
   );
   useEffect(() => void loadNames(), [loadNames]);
 
-  const open = useCallback((name: string) => {
+  const open = useCallback((name: string, keepMessage = false) => {
     setSelected(name);
     setRename(name);
     setCredits(null);
-    setMessage("");
+    if (!keepMessage) setMessage("");
     jsonRequest<{credits: CreditRow[]}>(`/api/admin/authors/credits?name=${encodeURIComponent(name)}`)
       .then((payload) => setCredits(payload.credits))
       .catch((e: Error) => setError(e.message));
@@ -79,7 +79,7 @@ export function CuratorAuthors({onBack}: {onBack: () => void}) {
     void act(
       () => jsonRequest("/api/admin/authors/rename", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({from: selected, to})}),
       existing ? `«${selected}» объединено с «${to}».` : `Переименовано в «${to}».`,
-    ).then(() => open(to));
+    ).then(() => open(to, true));
   };
 
   const setStatus = (credit: CreditRow, status: CreditRow["status"]) =>
