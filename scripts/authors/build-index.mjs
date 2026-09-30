@@ -9,7 +9,7 @@ const arg = (name, fallback) => process.argv.find((a) => a.startsWith(`--${name}
 const cacheDir = arg('cache', '.authors-cache');
 const out = arg('out', 'archive-catalog/authors-index.json');
 
-const rows = readdirSync(cacheDir).sort().flatMap((issueDir) =>
+const rows = readdirSync(cacheDir).filter((d) => /^\d{4}-/.test(d)).sort().flatMap((issueDir) =>
   readdirSync(join(cacheDir, issueDir)).filter((f) => f.startsWith('sheet-')).flatMap((f) => {
     const s = JSON.parse(readFileSync(join(cacheDir, issueDir, f), 'utf8'));
     return creditsFromSheet(s.result, { year: s.year, number: s.number, serial: s.serial, sheet: s.sheet, printedPage: s.printedPage, source: s.model })

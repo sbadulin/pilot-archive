@@ -14,7 +14,7 @@ const now = new Date().toISOString();
 const out = [];
 let total = 0;
 
-for (const issueDir of readdirSync(cacheDir).sort()) {
+for (const issueDir of readdirSync(cacheDir).filter((d) => /^\d{4}-/.test(d)).sort()) {
   const sheets = readdirSync(join(cacheDir, issueDir)).filter((f) => f.startsWith('sheet-')).sort()
     .map((f) => JSON.parse(readFileSync(join(cacheDir, issueDir, f), 'utf8')));
   for (const s of sheets) {
