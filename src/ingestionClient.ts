@@ -21,7 +21,7 @@ export type Submission = {
   publishedAt?: string;
 };
 
-async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
+export async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(apiUrl(url), { ...init, credentials: 'include' });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error ?? `Ошибка запроса: ${response.status}`);

@@ -28,6 +28,7 @@ import {adminUrl, isPublicSite, manifestUrl} from "./config";
 import {groupSpreads, printedPages} from "./readerLayout";
 import {Checkbox} from "./checkbox";
 import {AuthorSearch} from "./authorSearchView";
+import {CuratorAuthors} from "./curatorAuthors";
 import {
   issues as staticIssues,
   issuePdfUrl,
@@ -48,7 +49,8 @@ import {
 type Screen =
   | {kind: "archive"}
   | {kind: "reader"; id: number | string; page?: number}
-  | {kind: "upload"};
+  | {kind: "upload"}
+  | {kind: "authors"};
 type Draft = {
   file: File;
   pdf: PDFDocumentProxy;
@@ -1531,7 +1533,9 @@ export default function Home() {
               issue.serial === issueMatch[3].padStart(4, "0"),
           )
         : undefined;
-      if (hash.startsWith("#add")) {
+      if (hash === "#authors" && !isPublicSite()) {
+        setScreen({kind: "authors"});
+      } else if (hash.startsWith("#add")) {
         if (isPublicSite()) {
           window.location.replace(adminUrl());
           return;
@@ -1615,6 +1619,14 @@ export default function Home() {
           >
             Люди
           </a>
+          {!isPublicSite() && (
+            <a
+              href="#authors"
+              className={screen.kind === "authors" ? "active" : ""}
+            >
+              Имена авторов
+            </a>
+          )}
         </nav>
         <button
           className="header-add"
@@ -1626,6 +1638,8 @@ export default function Home() {
       </header>
       {screen.kind === "upload" ? (
         <Upload onBack={back} />
+      ) : screen.kind === "authors" ? (
+        <CuratorAuthors onBack={back} />
       ) : (
         <main id="main" className="shell archive-page">
           <section className="masthead">

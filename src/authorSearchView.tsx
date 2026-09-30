@@ -91,15 +91,20 @@ export function AuthorSearch({issues}: {issues: Issue[]}) {
       {selected && (
         <div className="author-credits">
           <h3>{selected.name}</h3>
+          {selected.aliases?.length > 0 && (
+            <p className="author-aliases">Также встречается как: {selected.aliases.join(", ")}</p>
+          )}
           <ul>
             {credits.map((credit) => {
               const issue = byKey.get(credit.issue)!;
               return (
                 <li key={`${credit.issue}-${credit.page}-${credit.title ?? ""}`}>
                   <a href={`#issue-${credit.issue}-p${credit.page}`}>
-                    № {issue.number} ({issue.serial}) · {issue.dateLabel} · стр. {credit.page}
+                    <span className="author-where">
+                      № {issue.number} ({issue.serial}) · {issue.dateLabel} · стр. {credit.page}
+                    </span>
+                    {credit.title && <span className="author-title">{credit.title}</span>}
                   </a>
-                  {credit.title && <span className="author-title">{credit.title}</span>}
                 </li>
               );
             })}
