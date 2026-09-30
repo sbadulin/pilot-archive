@@ -44,6 +44,19 @@ export async function sendSubmission(file: File, metadata: { year: number; numbe
 
 export async function loadSubmissionQueue() { return jsonRequest<{ submissions: Submission[] }>('/api/admin/submissions'); }
 export async function approveSubmission(id: string) { return jsonRequest(`/api/admin/submissions/${id}/approve`, { method: 'POST' }); }
+// One rendered sheet as base64 JPEG text; the server finds and stores its bylines.
+export async function recognizeSubmissionSheet(id: string, sheet: number, page: number, jpegBase64: string) {
+  return jsonRequest<{ sheet: number; pageType: string | null; model: string; fallback: string | null; credits: number }>(
+    `/api/admin/submissions/${id}/recognize?sheet=${sheet}&page=${page}`,
+    { method: 'POST', headers: { 'content-type': 'text/plain' }, body: jpegBase64 },
+  );
+}
+export async function loadRecognizedSheets(id: string) {
+  return (await jsonRequest<{ sheets: number[] }>(`/api/admin/submissions/${id}/recognize`)).sheets;
+}
+export async function republishAuthorsIndex() {
+  return jsonRequest<{ names: number }>('/api/admin/authors/rebuild-index', { method: 'POST' });
+}
 export async function rejectSubmission(id: string, reason: string) { return jsonRequest(`/api/admin/submissions/${id}/reject`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ reason }) }); }
 
 export function submissionToIssue(item: Submission): Issue {

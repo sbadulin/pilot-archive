@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyNameFix, creditsFromSheet, normalizeName, similarNames, variantKey } from '../src/authorNames.ts';
+import { applyNameFix, creditId, creditsFromSheet, normalizeName, similarNames, variantKey } from '../src/authorNames.ts';
 
 test('names one letter apart in a long word are similar', () => {
   assert.ok(similarNames('Васиуалий ЛОПАТА', 'Васисуалий ЛОПАТА'));
@@ -67,6 +67,13 @@ test('unsigned materials give no credits; a byline without names falls back to t
 test('photo and drawing credits keep their kind', () => {
   const credits = creditsFromSheet({ articles: [], credits: [{ kind: 'photo', name: 'Захар Веселов' }] }, context);
   assert.deepEqual(credits.map((c) => [c.kind, c.name]), [['photo', 'Захар Веселов']]);
+});
+
+test('credit ids match the ones already imported into D1', async () => {
+  const { createHash } = await import('node:crypto');
+  const c = { year: 2000, number: '26', serial: '0091', sheet: 7, title: null, byline: 'ДЖОАНА', name: 'ДЖОАНА' };
+  const imported = createHash('sha1').update([c.year, c.number, c.serial, c.sheet, c.title, c.byline, c.name].join('\u0000')).digest('hex');
+  assert.equal(await creditId(c), imported);
 });
 
 test('line breaks in a byline become spaces', () => {

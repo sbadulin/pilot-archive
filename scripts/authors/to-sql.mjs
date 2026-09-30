@@ -3,10 +3,9 @@
 // Apply: wrangler d1 execute pilot_archive --remote --file=authors.sql
 // Credit ids are derived from where the name was found, so re-importing an issue keeps
 // curator renames and hidden credits; name_fixes is applied to whatever is new.
-import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { creditsFromSheet } from '../../src/authorNames.ts';
+import { creditId, creditsFromSheet } from '../../src/authorNames.ts';
 
 const cacheDir = process.argv.find((a) => a.startsWith('--cache='))?.split('=')[1] ?? '.authors-cache';
 const q = (v) => (v === null || v === undefined ? 'NULL' : typeof v === 'number' ? String(v) : `'${String(v).replace(/'/g, "''")}'`);
@@ -22,7 +21,7 @@ for (const issueDir of readdirSync(cacheDir).filter((d) => /^\d{4}-/.test(d)).so
     const credits = creditsFromSheet(s.result, { year: s.year, number: s.number, serial: s.serial, sheet: s.sheet, printedPage: s.printedPage, source: s.model });
     for (const c of credits) {
       total++;
-      const id = createHash('sha1').update([c.year, c.number, c.serial, c.sheet, c.title, c.byline, c.name].join('\u0000')).digest('hex');
+      const id = await creditId(c);
       out.push(`INSERT INTO credits (id, issue_year, issue_number, issue_serial, sheet, printed_page, kind, title, byline, name, name_key, source, status, created_at, updated_at) VALUES (${[id, c.year, c.number, c.serial, c.sheet, c.printedPage, c.kind, c.title, c.byline, c.name, c.nameKey, c.source, 'auto', now, now].map(q).join(', ')}) ON CONFLICT(id) DO NOTHING;`);
     }
   }

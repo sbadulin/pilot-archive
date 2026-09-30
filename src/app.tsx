@@ -42,6 +42,9 @@ import {
 import {
   approveSubmission,
   loadSubmissionPdf,
+  recognizeSubmissionSheet,
+  loadRecognizedSheets,
+  republishAuthorsIndex,
   loadSubmissionQueue,
   rejectSubmission,
   sendSubmission,
@@ -738,6 +741,8 @@ function Upload({onBack}: {onBack: () => void}) {
     window.location.hash.includes("role=curator"),
   );
   const [queueError, setQueueError] = useState("");
+  const [recognition, setRecognition] = useState("");
+  const [moderating, setModerating] = useState<string | null>(null);
   const [preview, setPreview] = useState<{
     item: Submission;
     pdf: PDFDocumentProxy;
@@ -930,14 +935,115 @@ function Upload({onBack}: {onBack: () => void}) {
     void preview?.pdf.destroy();
     setPreview(null);
   };
-  const moderate = async (item: Submission, action: "approve" | "reject") => {
-    if (action === "approve") await approveSubmission(item.id);
-    else
-      await rejectSubmission(
-        item.id,
-        window.prompt("Причина отклонения") ?? "Нужно уточнить данные выпуска.",
+  // Bylines are recognized before approval, while the PDF is still in the private bucket.
+  // A retry sends only the sheets that have no recognition yet.
+  const recognizeBylines = async (item: Submission, onlyMissing = false) => {
+    const recognized = new Set(onlyMissing ? await loadRecognizedSheets(item.id) : []);
+    const pdf = await openPdf(await loadSubmissionPdf(item.id));
+    try {
+      const areas: number[] = [];
+      for (let n = 1; n <= pdf.numPages; n++) {
+        const viewport = (await pdf.getPage(n)).getViewport({scale: 1});
+        areas.push(viewport.width * viewport.height);
+      }
+      const typical = [...areas].sort((a, b) => a - b)[Math.floor(areas.length / 2)];
+      const printed = printedPages(
+        pdf.numPages,
+        areas.flatMap((area, index) => (area > typical * 1.3 ? [index + 1] : [])),
       );
-    refreshQueue();
+      const queue = Array.from({length: pdf.numPages}, (_, index) => index + 1).filter(
+        (sheet) => !recognized.has(sheet),
+      );
+      const total = queue.length;
+      const failed: number[] = [];
+      let stopped = "";
+      let done = 0;
+      let names = 0;
+      setRecognition(`Распознаём подписи в № ${item.number}: 0 из ${total}`);
+      const worker = async () => {
+        for (let sheet = queue.shift(); sheet; sheet = queue.shift()) {
+          try {
+            const page = await pdf.getPage(sheet);
+            // 150 dpi: enough for bylines, small enough to send.
+            const viewport = page.getViewport({scale: 150 / 72});
+            const canvas = document.createElement("canvas");
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            await page.render({canvas, viewport}).promise;
+            const jpeg = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
+            canvas.width = 0;
+            canvas.height = 0;
+            const result = await recognizeSubmissionSheet(item.id, sheet, printed.first(sheet), jpeg);
+            names += result.credits;
+          } catch (error) {
+            failed.push(sheet);
+            // Out of AI Gateway balance: every other sheet would fail the same way.
+            if ((error as Error).message.startsWith("Баланс")) {
+              stopped = (error as Error).message;
+              failed.push(...queue.splice(0));
+            }
+          }
+          done++;
+          setRecognition(`Распознаём подписи в № ${item.number}: ${done} из ${total}`);
+        }
+      };
+      await Promise.all([worker(), worker(), worker()]);
+      return {names, sheets: total, failed: failed.sort((a, b) => a - b), stopped};
+    } finally {
+      void pdf.destroy();
+    }
+  };
+  const recognitionSummary = (result: Awaited<ReturnType<typeof recognizeBylines>>) =>
+    result.stopped
+      ? result.stopped
+      : `Найдено подписей: ${result.names} на ${result.sheets} листах${result.failed.length ? `; не распознаны листы ${result.failed.join(", ")} — нажмите «Распознать подписи», чтобы повторить` : ""}.`;
+  const retryRecognition = async (item: Submission) => {
+    setModerating(item.id);
+    setQueueError("");
+    try {
+      const result = await recognizeBylines(item, true);
+      if (result.sheets === 0) setRecognition(`В № ${item.number} все листы уже распознаны.`);
+      else {
+        setRecognition(`№ ${item.number}: ${recognitionSummary(result)}`);
+        // Nothing new to publish when recognition stopped or found nothing.
+        if (!result.stopped && result.names > 0)
+          await republishAuthorsIndex().catch((error: Error) =>
+          setQueueError(
+            `Подписи сохранены, но поиск на сайте не обновился (${error.message}). Нажмите «Обновить поиск на сайте» на странице «Имена авторов».`,
+          ),
+        );
+      }
+    } catch (error) {
+      setQueueError((error as Error).message);
+    } finally {
+      setModerating(null);
+    }
+  };
+  const moderate = async (item: Submission, action: "approve" | "reject") => {
+    setModerating(item.id);
+    setQueueError("");
+    try {
+      if (action === "approve") {
+        let summary: string;
+        try {
+          const result = await recognizeBylines(item);
+          summary = recognitionSummary(result);
+        } catch (error) {
+          summary = `Подписи не распознаны (${(error as Error).message}), выпуск одобрен без них.`;
+        }
+        await approveSubmission(item.id);
+        setRecognition(`№ ${item.number} одобрен. ${summary}`);
+      } else
+        await rejectSubmission(
+          item.id,
+          window.prompt("Причина отклонения") ?? "Нужно уточнить данные выпуска.",
+        );
+    } catch (error) {
+      setQueueError((error as Error).message);
+    } finally {
+      setModerating(null);
+      refreshQueue();
+    }
   };
   return (
     <main id="main" className="upload-page shell">
@@ -1394,6 +1500,11 @@ function Upload({onBack}: {onBack: () => void}) {
                   {queueError}
                 </p>
               )}
+              {recognition && (
+                <p className="curator-message" role="status">
+                  {recognition}
+                </p>
+              )}
               {queue.length === 0 ? (
                 <p>Новых заявок нет.</p>
               ) : (
@@ -1429,11 +1540,22 @@ function Upload({onBack}: {onBack: () => void}) {
                         >
                           Предпросмотр
                         </button>
+                        {item.status === "approved" && (
+                          <button
+                            className="outline-button"
+                            type="button"
+                            disabled={moderating !== null}
+                            onClick={() => void retryRecognition(item)}
+                          >
+                            Распознать подписи
+                          </button>
+                        )}
                         {item.status === "pending" && (
                           <>
                             <button
                               className="primary-button"
                               type="button"
+                              disabled={moderating !== null}
                               onClick={() => void moderate(item, "approve")}
                             >
                               Одобрить
@@ -1441,6 +1563,7 @@ function Upload({onBack}: {onBack: () => void}) {
                             <button
                               className="text-button"
                               type="button"
+                              disabled={moderating !== null}
                               onClick={() => void moderate(item, "reject")}
                             >
                               Отклонить

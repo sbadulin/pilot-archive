@@ -10,3 +10,7 @@ database_id = "634d6382-b3e0-419e-a4e2-d7d0487229d5"
 [[r2_buckets]]
 binding = "ISSUES_BUCKET"
 bucket_name = "pilot-archive-issues"
+
+# Byline recognition on approval (Gemini, Claude fallback) — billed to the AI Gateway balance.
+[ai]
+binding = "AI"
