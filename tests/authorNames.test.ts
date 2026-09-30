@@ -1,6 +1,25 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { creditsFromSheet, normalizeName, variantKey } from '../src/authorNames.ts';
+import { applyNameFix, creditsFromSheet, normalizeName, similarNames, variantKey } from '../src/authorNames.ts';
+
+test('names one letter apart in a long word are similar', () => {
+  assert.ok(similarNames('Васиуалий ЛОПАТА', 'Васисуалий ЛОПАТА'));
+  assert.ok(similarNames('Катарина', 'КАТЕРИНА'));
+  assert.ok(similarNames('Валери', 'Валерия'));
+});
+
+test('short words, other words and deliberate nick spellings are not similar', () => {
+  assert.ok(!similarNames('Каня', 'Катя'));
+  assert.ok(!similarNames('Svetk@', 'Svetka'));
+  assert.ok(!similarNames('Константин ЛУКОНИН', 'Константин ПЕЛЫХ'));
+  assert.ok(!similarNames('Валерия', 'Валерия Иванова'));
+});
+
+test('name fixes replace a misread name by its variant key', () => {
+  const fixes = { 'Васиуалий ЛОПАТА': 'Васисуалий ЛОПАТА' };
+  assert.equal(applyNameFix('ВАСИУАЛИЙ Лопата.', fixes), 'Васисуалий ЛОПАТА');
+  assert.equal(applyNameFix('Лариса КОХАН', fixes), 'Лариса КОХАН');
+});
 
 test('search variants keep a nick\'s own spelling but not its case or trailing dot', () => {
   assert.notEqual(variantKey('Svetk@'), variantKey('Svetka'));

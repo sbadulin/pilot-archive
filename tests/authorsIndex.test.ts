@@ -32,6 +32,37 @@ test('the most frequent spelling names the variant', () => {
   assert.equal(names[0].name, 'Ляна');
 });
 
+test('a one-letter misreading under the same rubric joins the usual spelling', () => {
+  const { names } = composeAuthorsIndex([
+    row({ number: '01', name: 'Васиуалий ЛОПАТА', nameKey: 'васиуалий лопата', title: 'ПАРА АНЕКДОТОВ' }),
+    row({ number: '02', name: 'Васисуалий ЛОПАТА', nameKey: 'васисуалий лопата', title: 'Пара анекдотов' }),
+    row({ number: '03', name: 'Васисуалий ЛОПАТА', nameKey: 'васисуалий лопата', title: 'Пара анекдотов' }),
+  ], 1);
+  assert.equal(names.length, 1);
+  assert.equal(names[0].name, 'Васисуалий ЛОПАТА');
+  assert.deepEqual(names[0].aliases, ['Васиуалий ЛОПАТА']);
+  assert.deepEqual(names[0].keys.sort(), ['васисуалий лопата', 'васиуалий лопата']);
+  assert.equal(names[0].credits.length, 3);
+});
+
+test('similar names under different rubrics stay apart', () => {
+  const { names } = composeAuthorsIndex([
+    row({ name: 'Катарина', nameKey: 'катарина', title: 'Переписка: ищу друга' }),
+    row({ name: 'Катерина', nameKey: 'катерина', title: 'Вот такое письмо', page: 3 }),
+    row({ name: 'Катерина', nameKey: 'катерина', title: 'Строки из конверта', page: 4 }),
+  ], 1);
+  assert.deepEqual(names.map((n) => n.name).sort(), ['Катарина', 'Катерина']);
+});
+
+test('readers in one letters column are not merged by a shared heading', () => {
+  const { names } = composeAuthorsIndex([
+    row({ kind: 'letter', name: 'Валери', nameKey: 'валери', title: 'Переписка' }),
+    row({ kind: 'letter', name: 'Валерия', nameKey: 'валерия', title: 'Переписка', page: 3 }),
+    row({ kind: 'letter', name: 'Валерия', nameKey: 'валерия', title: 'Переписка', page: 4 }),
+  ], 1);
+  assert.equal(names.length, 2);
+});
+
 test('the same material is listed once per variant', () => {
   const { names } = composeAuthorsIndex([row(), row()], 1);
   assert.equal(names[0].credits.length, 1);

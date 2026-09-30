@@ -9,10 +9,11 @@ const arg = (name, fallback) => process.argv.find((a) => a.startsWith(`--${name}
 const cacheDir = arg('cache', '.authors-cache');
 const out = arg('out', 'archive-catalog/authors-index.json');
 
+const fixes = JSON.parse(readFileSync('archive-catalog/name-fixes.json', 'utf8'));
 const rows = readdirSync(cacheDir).sort().flatMap((issueDir) =>
   readdirSync(join(cacheDir, issueDir)).filter((f) => f.startsWith('sheet-')).flatMap((f) => {
     const s = JSON.parse(readFileSync(join(cacheDir, issueDir, f), 'utf8'));
-    return creditsFromSheet(s.result, { year: s.year, number: s.number, serial: s.serial, sheet: s.sheet, printedPage: s.printedPage, source: s.model })
+    return creditsFromSheet(s.result, { year: s.year, number: s.number, serial: s.serial, sheet: s.sheet, printedPage: s.printedPage, source: s.model }, fixes)
       .map((c) => ({ year: c.year, number: c.number, serial: c.serial, page: c.printedPage, kind: c.kind, title: c.title, name: c.name, nameKey: c.nameKey }));
   }));
 const index = composeAuthorsIndex(rows);

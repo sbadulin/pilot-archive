@@ -26,8 +26,11 @@ export function searchNames(names: IndexName[], query: string, limit = 8): Index
   if (words.join('').length < MIN_QUERY) return [];
   return names
     .filter((entry) => {
-      const nameWords = entry.key.split(' ');
-      return words.every((q) => nameWords.some((w) => wordMatches(q, w)));
+      // Any spelling folded into the entry finds it.
+      return (entry.keys ?? [entry.key]).some((key) => {
+        const nameWords = key.split(' ');
+        return words.every((q) => nameWords.some((w) => wordMatches(q, w)));
+      });
     })
     .sort((a, b) => b.credits.length - a.credits.length || a.key.localeCompare(b.key, 'ru'))
     .slice(0, limit);
