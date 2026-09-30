@@ -29,7 +29,8 @@ export function applyNameFix(name: string, fixes: Record<string, string>): strin
   return name;
 }
 
-const oneSubstitutionOrGap = (a: string, b: string) => {
+// Exactly one letter replaced, added or dropped.
+export const oneSubstitutionOrGap = (a: string, b: string) => {
   if (a === b || Math.abs(a.length - b.length) > 1) return false;
   let i = 0, j = 0, edits = 0;
   while (i < a.length && j < b.length) {

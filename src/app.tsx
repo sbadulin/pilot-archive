@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -30,7 +32,15 @@ import {adminUrl, isPublicSite, manifestUrl} from "./config";
 import {groupSpreads, printedPages} from "./readerLayout";
 import {Checkbox} from "./checkbox";
 import {AuthorSearch} from "./authorSearchView";
-import {CuratorAuthors} from "./curatorAuthors";
+import {openPdf} from "./pdf";
+
+// Curator tools are split out and exist only in the admin build (__ADMIN__ is set by build.mjs):
+// the public site never downloads them.
+const curatorTools = () =>
+  __ADMIN__ ? import("./curatorRecognition") : Promise.reject(new Error("Доступно только в админке."));
+const CuratorAuthors = __ADMIN__
+  ? lazy(() => import("./curatorAuthors").then((module) => ({default: module.CuratorAuthors})))
+  : (_: {issues: Issue[]; onBack: () => void}) => null;
 import {
   issues as staticIssues,
   issuePdfUrl,
@@ -42,9 +52,6 @@ import {
 import {
   approveSubmission,
   loadSubmissionPdf,
-  recognizeSubmissionSheet,
-  loadRecognizedSheets,
-  republishAuthorsIndex,
   loadSubmissionQueue,
   rejectSubmission,
   sendSubmission,
@@ -334,23 +341,6 @@ function dataUrlToBlob(value: string) {
   });
 }
 
-async function openPdf(data: ArrayBuffer | string) {
-  const engine = await import("pdfjs-dist");
-  engine.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.mjs";
-  const task = engine.getDocument({
-    ...(typeof data === "string" ? {url: data} : {data}),
-    cMapUrl: "/pdfjs/cmaps/",
-    cMapPacked: true,
-    standardFontDataUrl: "/pdfjs/standard_fonts/",
-    wasmUrl: "/pdfjs/wasm/",
-    disableAutoFetch: true,
-    disableStream: true,
-  });
-  task.onPassword = () => {
-    void task.destroy();
-  };
-  return task.promise;
-}
 
 function Reader({
   issue,
@@ -935,84 +925,12 @@ function Upload({onBack}: {onBack: () => void}) {
     void preview?.pdf.destroy();
     setPreview(null);
   };
-  // Bylines are recognized before approval, while the PDF is still in the private bucket.
-  // A retry sends only the sheets that have no recognition yet.
-  const recognizeBylines = async (item: Submission, onlyMissing = false) => {
-    const recognized = new Set(onlyMissing ? await loadRecognizedSheets(item.id) : []);
-    const pdf = await openPdf(await loadSubmissionPdf(item.id));
-    try {
-      const areas: number[] = [];
-      for (let n = 1; n <= pdf.numPages; n++) {
-        const viewport = (await pdf.getPage(n)).getViewport({scale: 1});
-        areas.push(viewport.width * viewport.height);
-      }
-      const typical = [...areas].sort((a, b) => a - b)[Math.floor(areas.length / 2)];
-      const printed = printedPages(
-        pdf.numPages,
-        areas.flatMap((area, index) => (area > typical * 1.3 ? [index + 1] : [])),
-      );
-      const queue = Array.from({length: pdf.numPages}, (_, index) => index + 1).filter(
-        (sheet) => !recognized.has(sheet),
-      );
-      const total = queue.length;
-      const failed: number[] = [];
-      let stopped = "";
-      let done = 0;
-      let names = 0;
-      setRecognition(`Распознаём подписи в № ${item.number}: 0 из ${total}`);
-      const worker = async () => {
-        for (let sheet = queue.shift(); sheet; sheet = queue.shift()) {
-          try {
-            const page = await pdf.getPage(sheet);
-            // 150 dpi: enough for bylines, small enough to send.
-            const viewport = page.getViewport({scale: 150 / 72});
-            const canvas = document.createElement("canvas");
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
-            await page.render({canvas, viewport}).promise;
-            const jpeg = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
-            canvas.width = 0;
-            canvas.height = 0;
-            const result = await recognizeSubmissionSheet(item.id, sheet, printed.first(sheet), jpeg);
-            names += result.credits;
-          } catch (error) {
-            failed.push(sheet);
-            // Out of AI Gateway balance: every other sheet would fail the same way.
-            if ((error as Error).message.startsWith("Баланс")) {
-              stopped = (error as Error).message;
-              failed.push(...queue.splice(0));
-            }
-          }
-          done++;
-          setRecognition(`Распознаём подписи в № ${item.number}: ${done} из ${total}`);
-        }
-      };
-      await Promise.all([worker(), worker(), worker()]);
-      return {names, sheets: total, failed: failed.sort((a, b) => a - b), stopped};
-    } finally {
-      void pdf.destroy();
-    }
-  };
-  const recognitionSummary = (result: Awaited<ReturnType<typeof recognizeBylines>>) =>
-    result.stopped
-      ? result.stopped
-      : `Найдено подписей: ${result.names} на ${result.sheets} листах${result.failed.length ? `; не распознаны листы ${result.failed.join(", ")} — нажмите «Распознать подписи», чтобы повторить` : ""}.`;
+  const report = {progress: setRecognition, error: setQueueError};
   const retryRecognition = async (item: Submission) => {
     setModerating(item.id);
     setQueueError("");
     try {
-      const result = await recognizeBylines(item, true);
-      if (result.sheets === 0) setRecognition(`В № ${item.number} все листы уже распознаны.`);
-      else {
-        setRecognition(`№ ${item.number}: ${recognitionSummary(result)}`);
-        // Nothing new to publish when recognition stopped or found nothing.
-        if (!result.stopped && result.names > 0)
-          await republishAuthorsIndex().catch((error: Error) =>
-          setQueueError(
-            `Подписи сохранены, но поиск на сайте не обновился (${error.message}). Нажмите «Обновить поиск на сайте» на странице «Имена авторов».`,
-          ),
-        );
-      }
+      setRecognition(await (await curatorTools()).retryRecognition(item, report));
     } catch (error) {
       setQueueError((error as Error).message);
     } finally {
@@ -1023,17 +941,9 @@ function Upload({onBack}: {onBack: () => void}) {
     setModerating(item.id);
     setQueueError("");
     try {
-      if (action === "approve") {
-        let summary: string;
-        try {
-          const result = await recognizeBylines(item);
-          summary = recognitionSummary(result);
-        } catch (error) {
-          summary = `Подписи не распознаны (${(error as Error).message}), выпуск одобрен без них.`;
-        }
-        await approveSubmission(item.id);
-        setRecognition(`№ ${item.number} одобрен. ${summary}`);
-      } else
+      if (action === "approve")
+        setRecognition(await (await curatorTools()).approveWithRecognition(item, report));
+      else
         await rejectSubmission(
           item.id,
           window.prompt("Причина отклонения") ?? "Нужно уточнить данные выпуска.",
@@ -1540,7 +1450,7 @@ function Upload({onBack}: {onBack: () => void}) {
                         >
                           Предпросмотр
                         </button>
-                        {item.status === "approved" && (
+                        {__ADMIN__ && item.status === "approved" && (
                           <button
                             className="outline-button"
                             type="button"
@@ -1591,7 +1501,7 @@ export default function Home() {
   // Curator tools appear only for a curator signed in through Cloudflare Access.
   const [isCurator, setIsCurator] = useState(false);
   useEffect(() => {
-    if (isPublicSite()) return;
+    if (!__ADMIN__ || isPublicSite()) return;
     void jsonRequest<{role: string | null}>("/api/admin/whoami")
       .then((me) => setIsCurator(me.role === "curator"))
       .catch(() => undefined);
@@ -1754,7 +1664,7 @@ export default function Home() {
           >
             Люди
           </a>
-          {isCurator && (
+          {__ADMIN__ && isCurator && (
             <a
               href="#authors"
               className={screen.kind === "authors" ? "active" : ""}
@@ -1774,7 +1684,9 @@ export default function Home() {
       {screen.kind === "upload" ? (
         <Upload onBack={back} />
       ) : screen.kind === "authors" && isCurator ? (
-        <CuratorAuthors issues={archiveIssues} onBack={back} />
+        <Suspense fallback={null}>
+          <CuratorAuthors issues={archiveIssues} onBack={back} />
+        </Suspense>
       ) : (
         <main id="main" className="shell archive-page">
           <section className="masthead">

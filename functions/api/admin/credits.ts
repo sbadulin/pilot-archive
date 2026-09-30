@@ -1,5 +1,4 @@
 import { requireCurator, json } from '../_lib/auth';
-import { publishAuthorsIndex } from '../_lib/authorsPublish';
 import { normalizeName } from '../../../src/authorNames';
 
 const KINDS = new Set(['article', 'letter', 'photo', 'drawing', 'other']);
@@ -29,6 +28,5 @@ export async function onRequestPost(context: any) {
     `INSERT INTO credits (id, issue_year, issue_number, issue_serial, sheet, printed_page, kind, title, byline, name, name_key, source, status, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', ?, ?)`,
   ).bind(id, year, number, serial, page, page, kind, title, name, name, normalizeName(name), `curator:${user.email}`, now, now).run();
-  const published = await publishAuthorsIndex(context);
-  return json({ id, published: Boolean(published) }, { status: 201 });
+  return json({ id }, { status: 201 });
 }
