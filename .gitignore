@@ -9,3 +9,4 @@ backups/
 test-results/
 playwright-report/
 manifest.rebuilt.json
+.authors-cache/
