@@ -99,6 +99,19 @@ export function CuratorAuthors({onBack}: {onBack: () => void}) {
         имени или скройте запись, если это не подпись. Правки сохраняются при повторном распознавании номера и сразу
         попадают в поиск на сайте.
       </p>
+      <button
+        type="button"
+        className="curator-publish"
+        disabled={busy}
+        onClick={() =>
+          void act(
+            () => jsonRequest<{names: number}>("/api/admin/authors/rebuild-index", {method: "POST"}),
+            "Поиск на сайте обновлён.",
+          )
+        }
+      >
+        Обновить поиск на сайте
+      </button>
       {error && <p className="form-error" role="alert">{error}</p>}
       {message && <p className="curator-message" role="status">{message}</p>}
       <div className="curator-layout">
