@@ -7,11 +7,15 @@ import { run, messages } from './cf.mjs';
 const PROMPT = `Это скан страницы российской молодёжной газеты «Первый Пилот» (Комсомольск-на-Амуре, 1996–2007).
 Найди на странице все материалы (статьи, заметки, интервью, стихи, рубрики) и для каждого укажи подпись автора ровно так, как она напечатана.
 Подпись обычно стоит в конце материала (часто жирным или курсивом, справа), иногда под заголовком. Это может быть имя, фамилия, инициалы, псевдоним («ЛЯНА», «Князь Тишины») или коллектив («Девчата ПУ-33»).
+Колонки коротких писем и объявлений читателей («Переписка», «Строки из конверта», «Вот такое письмо», знакомства) НЕ объединяй в один материал: перечисли КАЖДОЕ подписанное письмо или объявление отдельно (title — рубрика и первые слова, byline — его подпись).
 Если подписи нет — byline: null. Подписи к фото и рисункам («Фото ...», «Рисунок ...») выноси отдельно в credits.
+Для каждой подписи дополнительно выдели authors — чистые имена авторов без служебных слов («Прислала», «Беседовала», «Материал подготовил», «записали»), без возраста, школы, класса и города. Несколько авторов — отдельными элементами. Примеры:
+«Прислала Катя Иващенко, 12 лет.» → ["Катя Иващенко"]; «Откровение VIRUS'а записали Sly и Neo» → ["Sly", "Neo"]; «Беседовала Бланкита, г. Амурск» → ["Бланкита"]; «Ваша КАТЕРИНА» → ["КАТЕРИНА"]; «Девчата ПУ-33 г. Амурска» → ["Девчата ПУ-33"].
+Люди, о которых написан материал, и цитируемые авторы (исполнители песен, классики) — не авторы материала.
 Если это обложка (первая полоса), дополнительно заполни cover: номер выпуска, сквозной номер в скобках, дату выхода.
 Ответь ТОЛЬКО JSON без пояснений по схеме:
 {"cover": {"number": "11", "serial": "0076", "date": "2000-03-15"} | null,
- "articles": [{"title": "...", "byline": "..." | null}],
+ "articles": [{"title": "...", "byline": "..." | null, "authors": ["..."]}],
  "credits": [{"kind": "photo" | "drawing", "name": "..."}]}`;
 
 // Pager/greetings pages: dozens of short signed messages in tiny type, read tile by tile.
@@ -54,7 +58,7 @@ for (const page of pages) {
         temperature: 0,
       });
     const text = result.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? result.content?.filter((b) => b.type === 'text').map((b) => b.text).join('') ?? result.response ?? result.choices?.[0]?.message?.content ?? JSON.stringify(result);
-    const out = { page: basename(page), model, ms: Date.now() - started, usage: result.usage, ...parseJson(typeof text === 'string' ? text : JSON.stringify(text)) };
+    const out = { page: basename(page), model, ms: Date.now() - started, usage: result.usage ?? result.usageMetadata, ...parseJson(typeof text === 'string' ? text : JSON.stringify(text)) };
     writeFileSync(`${outDir}/${basename(page, '.jpg')}.json`, JSON.stringify(out, null, 2));
     console.log(basename(page), `${out.ms}ms`, out.parseError ? 'PARSE ERROR' : `${out.articles?.length ?? 0} articles`);
   } catch (e) {

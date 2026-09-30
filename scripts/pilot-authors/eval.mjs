@@ -4,6 +4,10 @@ import { readFileSync, existsSync } from 'node:fs';
 
 const [refPath, outDir, ...flags] = process.argv.slice(2);
 const verbose = flags.includes('--verbose');
+// --names: score the model's clean author names (authors[]) instead of raw bylines.
+const namesMode = flags.includes('--names');
+const DIRTY = /прислал|беседовал|подготовил|записал|материал|вела\b|\d|\bг\.|сш\b|класс|лет\b/i;
+let dirty = [];
 const skipKinds = new Set((flags.find((f) => f.startsWith('--skip-kinds='))?.split('=')[1] ?? 'pager,ads,other').split(','));
 const ref = JSON.parse(readFileSync(refPath, 'utf8'));
 
@@ -31,7 +35,20 @@ for (const page of ref.pages) {
   const want = page.materials.filter((m) => m.byline && !skipKinds.has(m.kind)).map((m) => m.byline);
   if (page.materials.some((m) => skipKinds.has(m.kind) && m.kind === 'pager')) continue; // pager pages are a separate run
   const file = `${outDir}/${page.page}.json`;
-  const got = existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')).articles ?? []).map((a) => a.byline).filter(Boolean) : [];
+  const arts = existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')).articles ?? []) : [];
+  if (namesMode) {
+    // One entry per article: its names joined, so a two-author byline counts once.
+    const names = arts.filter((a) => a.byline).map((a) => (a.authors?.length ? a.authors : [a.byline]));
+    names.flat().filter((n) => DIRTY.test(n)).forEach((n) => dirty.push(`${page.page}: «${n}»`));
+    const got = names.map((n) => n.join(' и '));
+    scorePage(page, want, got);
+    continue;
+  }
+  const got = arts.map((a) => a.byline).filter(Boolean);
+  scorePage(page, want, got);
+}
+
+function scorePage(page, want, got) {
   const used = new Set();
   t.ref += want.length;
   for (const w of want) {
@@ -44,7 +61,8 @@ for (const page of ref.pages) {
 }
 
 const found = t.exact + t.close;
-console.log(`${ref.issue}: reference bylines ${t.ref}, found ${found} (${Math.round((100 * found) / (t.ref || 1))}%: exact ${t.exact}, close ${t.close}), missed ${t.missed}, extra ${t.extra}`);
+console.log(`${ref.issue}: reference bylines ${t.ref}, found ${found} (${Math.round((100 * found) / (t.ref || 1))}%: exact ${t.exact}, close ${t.close}), missed ${t.missed}, extra ${t.extra}${namesMode ? `, dirty names ${dirty.length}` : ''}`);
+if (namesMode && verbose) { console.log('dirty:'); dirty.forEach((s) => console.log('  ' + s)); }
 if (ref.cover) {
   const c = existsSync(`${outDir}/p-01.json`) ? JSON.parse(readFileSync(`${outDir}/p-01.json`, 'utf8')).cover : null;
   const ok = c && Number(c.number) === Number(ref.cover.number) && Number(c.serial) === Number(ref.cover.serial) && c.date === ref.cover.date;
