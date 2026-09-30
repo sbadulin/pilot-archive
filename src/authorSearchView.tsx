@@ -1,5 +1,5 @@
 import {useEffect, useId, useMemo, useState} from "react";
-import {Search} from "lucide-react";
+import {Search, X} from "lucide-react";
 import {authorsIndexUrl} from "./config";
 import {MIN_QUERY, searchNames} from "./authorSearch";
 import type {Issue} from "./metadata";
@@ -13,7 +13,7 @@ const materialCount = (count: number) => {
 };
 
 // Search by the names printed under materials; results link to the page in the reader.
-export function AuthorSearch({issues}: {issues: Issue[]}) {
+export function AuthorSearch({issues, onClose}: {issues: Issue[]; onClose: () => void}) {
   const listId = useId();
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState<IndexName[] | null>(null);
@@ -47,13 +47,14 @@ export function AuthorSearch({issues}: {issues: Issue[]}) {
 
   return (
     <section className="author-search" aria-label="Поиск по авторам">
-      <label className="black-label" htmlFor={`${listId}-input`}>
+      <label className="visually-hidden" htmlFor={`${listId}-input`}>
         Найти автора
       </label>
       <div className="author-search-field">
         <Search size={20} aria-hidden="true" />
         <input
           id={`${listId}-input`}
+          autoFocus
           type="search"
           autoComplete="off"
           placeholder="Имя или псевдоним из подписи, например «Князь Тишины»"
@@ -67,8 +68,12 @@ export function AuthorSearch({issues}: {issues: Issue[]}) {
           }}
           onKeyDown={(event) => {
             if (event.key === "Enter" && matches[0]) setSelected(matches[0]);
+            if (event.key === "Escape" && !query) onClose();
           }}
         />
+        <button type="button" className="author-search-close" aria-label="Закрыть поиск" onClick={onClose}>
+          <X size={20} />
+        </button>
       </div>
       {matches.length > 0 && (
         <ul className="author-suggestions" id={listId} role="listbox">
