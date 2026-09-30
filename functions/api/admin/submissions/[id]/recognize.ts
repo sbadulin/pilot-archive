@@ -2,6 +2,19 @@ import { requireCurator, json } from '../../../_lib/auth';
 import { recognizeSheet } from '../../../_lib/recognition';
 import { creditId, creditsFromSheet } from '../../../../../src/authorNames';
 
+// Sheets already recognized, so a retry sends only the missing ones.
+export async function onRequestGet(context: any) {
+  const denied = requireCurator(context);
+  if (denied instanceof Response) return denied;
+  const { DB } = context.env;
+  if (!DB) return json({ error: 'D1 ещё не подключён.' }, { status: 503 });
+  const row = await DB.prepare(`SELECT year, number, serial FROM issue_submissions WHERE id = ?`).bind(context.params.id).first();
+  if (!row) return json({ error: 'Заявка не найдена.' }, { status: 404 });
+  const { results } = await DB.prepare(`SELECT sheet FROM recognition_runs WHERE issue_year = ? AND issue_number = ? AND issue_serial = ? AND status = 'ok'`)
+    .bind(row.year, row.number, row.serial).all();
+  return json({ sheets: results.map((r: any) => r.sheet) });
+}
+
 // Recognize bylines on one sheet of a submission. The curator's browser renders the pages
 // and sends them one by one as base64 JPEG text: ?sheet=<PDF page>&page=<printed page>.
 export async function onRequestPost(context: any) {
@@ -24,7 +37,11 @@ export async function onRequestPost(context: any) {
   try {
     recognized = await recognizeSheet(AI, image);
   } catch (e) {
-    return json({ error: `Не удалось распознать лист ${sheet}: ${(e as Error).message.slice(0, 200)}` }, { status: 502 });
+    const message = (e as Error).message;
+    // An empty AI Gateway balance fails every sheet; the browser stops and says so.
+    if (/insufficient balance|402/i.test(message))
+      return json({ error: 'Баланс AI Gateway закончился — пополните его и нажмите «Распознать подписи».', code: 'balance' }, { status: 402 });
+    return json({ error: `Не удалось распознать лист ${sheet}: ${message.slice(0, 200)}` }, { status: 502 });
   }
   const credits = creditsFromSheet(recognized.result, { year: row.year, number: row.number, serial: row.serial, sheet, printedPage, source: recognized.model });
   const now = new Date().toISOString();

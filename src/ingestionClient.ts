@@ -51,6 +51,12 @@ export async function recognizeSubmissionSheet(id: string, sheet: number, page: 
     { method: 'POST', headers: { 'content-type': 'text/plain' }, body: jpegBase64 },
   );
 }
+export async function loadRecognizedSheets(id: string) {
+  return (await jsonRequest<{ sheets: number[] }>(`/api/admin/submissions/${id}/recognize`)).sheets;
+}
+export async function republishAuthorsIndex() {
+  return jsonRequest<{ names: number }>('/api/admin/authors/rebuild-index', { method: 'POST' });
+}
 export async function rejectSubmission(id: string, reason: string) { return jsonRequest(`/api/admin/submissions/${id}/reject`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ reason }) }); }
 
 export function submissionToIssue(item: Submission): Issue {
