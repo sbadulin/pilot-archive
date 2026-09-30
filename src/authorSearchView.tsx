@@ -1,5 +1,5 @@
 import {useEffect, useId, useMemo, useState} from "react";
-import {Search, X} from "lucide-react";
+import {Search} from "lucide-react";
 import {authorsIndexUrl} from "./config";
 import {MIN_QUERY, searchNames} from "./authorSearch";
 import type {Issue} from "./metadata";
@@ -71,9 +71,6 @@ export function AuthorSearch({issues, onClose}: {issues: Issue[]; onClose: () =>
             if (event.key === "Escape" && !query) onClose();
           }}
         />
-        <button type="button" className="author-search-close" aria-label="Закрыть поиск" onClick={onClose}>
-          <X size={20} />
-        </button>
       </div>
       {matches.length > 0 && (
         <ul className="author-suggestions" id={listId} role="listbox">

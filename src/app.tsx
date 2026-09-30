@@ -24,6 +24,7 @@ import {
   Plus,
   RotateCw,
   Search,
+  X,
 } from "lucide-react";
 import {adminUrl, isPublicSite, manifestUrl} from "./config";
 import {groupSpreads, printedPages} from "./readerLayout";
@@ -1679,7 +1680,11 @@ export default function Home() {
                 aria-expanded={searchOpen}
                 onClick={() => setSearchOpen((open) => !open)}
               >
-                <Search size={18} aria-hidden="true" />
+                {searchOpen ? (
+                  <X size={18} aria-hidden="true" />
+                ) : (
+                  <Search size={18} aria-hidden="true" />
+                )}
                 Найти автора
               </button>
             </div>
