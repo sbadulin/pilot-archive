@@ -42,6 +42,7 @@ import {
 import {
   approveSubmission,
   loadSubmissionPdf,
+  recognizeSubmissionSheet,
   loadSubmissionQueue,
   rejectSubmission,
   sendSubmission,
@@ -738,6 +739,8 @@ function Upload({onBack}: {onBack: () => void}) {
     window.location.hash.includes("role=curator"),
   );
   const [queueError, setQueueError] = useState("");
+  const [recognition, setRecognition] = useState("");
+  const [moderating, setModerating] = useState<string | null>(null);
   const [preview, setPreview] = useState<{
     item: Submission;
     pdf: PDFDocumentProxy;
@@ -930,14 +933,78 @@ function Upload({onBack}: {onBack: () => void}) {
     void preview?.pdf.destroy();
     setPreview(null);
   };
-  const moderate = async (item: Submission, action: "approve" | "reject") => {
-    if (action === "approve") await approveSubmission(item.id);
-    else
-      await rejectSubmission(
-        item.id,
-        window.prompt("Причина отклонения") ?? "Нужно уточнить данные выпуска.",
+  // Bylines are recognized before approval, while the PDF is still in the private bucket.
+  const recognizeBylines = async (item: Submission) => {
+    const pdf = await openPdf(await loadSubmissionPdf(item.id));
+    try {
+      const areas: number[] = [];
+      for (let n = 1; n <= pdf.numPages; n++) {
+        const viewport = (await pdf.getPage(n)).getViewport({scale: 1});
+        areas.push(viewport.width * viewport.height);
+      }
+      const typical = [...areas].sort((a, b) => a - b)[Math.floor(areas.length / 2)];
+      const printed = printedPages(
+        pdf.numPages,
+        areas.flatMap((area, index) => (area > typical * 1.3 ? [index + 1] : [])),
       );
-    refreshQueue();
+      const queue = Array.from({length: pdf.numPages}, (_, index) => index + 1);
+      const failed: number[] = [];
+      let done = 0;
+      let names = 0;
+      setRecognition(`Распознаём подписи в № ${item.number}: 0 из ${pdf.numPages}`);
+      const worker = async () => {
+        for (let sheet = queue.shift(); sheet; sheet = queue.shift()) {
+          try {
+            const page = await pdf.getPage(sheet);
+            // 150 dpi: enough for bylines, small enough to send.
+            const viewport = page.getViewport({scale: 150 / 72});
+            const canvas = document.createElement("canvas");
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            await page.render({canvas, viewport}).promise;
+            const jpeg = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
+            canvas.width = 0;
+            canvas.height = 0;
+            const result = await recognizeSubmissionSheet(item.id, sheet, printed.first(sheet), jpeg);
+            names += result.credits;
+          } catch {
+            failed.push(sheet);
+          }
+          done++;
+          setRecognition(`Распознаём подписи в № ${item.number}: ${done} из ${pdf.numPages}`);
+        }
+      };
+      await Promise.all([worker(), worker(), worker()]);
+      return {names, sheets: pdf.numPages, failed: failed.sort((a, b) => a - b)};
+    } finally {
+      void pdf.destroy();
+    }
+  };
+  const moderate = async (item: Submission, action: "approve" | "reject") => {
+    setModerating(item.id);
+    setQueueError("");
+    try {
+      if (action === "approve") {
+        let summary: string;
+        try {
+          const result = await recognizeBylines(item);
+          summary = `Найдено подписей: ${result.names} на ${result.sheets} листах${result.failed.length ? `; не распознаны листы ${result.failed.join(", ")}` : ""}.`;
+        } catch (error) {
+          summary = `Подписи не распознаны (${(error as Error).message}), выпуск одобрен без них.`;
+        }
+        await approveSubmission(item.id);
+        setRecognition(`№ ${item.number} одобрен. ${summary}`);
+      } else
+        await rejectSubmission(
+          item.id,
+          window.prompt("Причина отклонения") ?? "Нужно уточнить данные выпуска.",
+        );
+    } catch (error) {
+      setQueueError((error as Error).message);
+    } finally {
+      setModerating(null);
+      refreshQueue();
+    }
   };
   return (
     <main id="main" className="upload-page shell">
@@ -1394,6 +1461,11 @@ function Upload({onBack}: {onBack: () => void}) {
                   {queueError}
                 </p>
               )}
+              {recognition && (
+                <p className="curator-message" role="status">
+                  {recognition}
+                </p>
+              )}
               {queue.length === 0 ? (
                 <p>Новых заявок нет.</p>
               ) : (
@@ -1434,6 +1506,7 @@ function Upload({onBack}: {onBack: () => void}) {
                             <button
                               className="primary-button"
                               type="button"
+                              disabled={moderating !== null}
                               onClick={() => void moderate(item, "approve")}
                             >
                               Одобрить
@@ -1441,6 +1514,7 @@ function Upload({onBack}: {onBack: () => void}) {
                             <button
                               className="text-button"
                               type="button"
+                              disabled={moderating !== null}
                               onClick={() => void moderate(item, "reject")}
                             >
                               Отклонить

@@ -54,6 +54,13 @@ export function similarNames(a: string, b: string): boolean {
   return Math.min(p.length, q.length) >= 5 && oneSubstitutionOrGap(p, q);
 }
 
+// Stable id from where a name was found: re-importing a sheet keeps curator edits and adds no duplicates.
+export async function creditId(c: { year: number; number: string; serial: string; sheet: number; title: string | null; byline: string; name: string }) {
+  const bytes = new TextEncoder().encode([c.year, c.number, c.serial, c.sheet, c.title ?? '', c.byline, c.name].join('\u0000'));
+  const digest = await crypto.subtle.digest('SHA-1', bytes);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 export type CreditKind = 'article' | 'letter' | 'pager' | 'photo' | 'drawing' | 'other';
 
 export type SheetArticle = { title?: string | null; byline?: string | null; authors?: string[]; kind?: string };
