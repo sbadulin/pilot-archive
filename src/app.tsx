@@ -733,6 +733,10 @@ function Upload({onBack}: {onBack: () => void}) {
   const [queueError, setQueueError] = useState("");
   const [recognition, setRecognition] = useState("");
   const [moderating, setModerating] = useState<string | null>(null);
+  // Approval is instant; byline recognition runs here in the background, one issue at a time.
+  const [recognitionQueue, setRecognitionQueue] = useState<Submission[]>([]);
+  const [recognizing, setRecognizing] = useState<Submission | null>(null);
+  const [recognitionLog, setRecognitionLog] = useState<string[]>([]);
   const [preview, setPreview] = useState<{
     item: Submission;
     pdf: PDFDocumentProxy;
@@ -925,24 +929,40 @@ function Upload({onBack}: {onBack: () => void}) {
     void preview?.pdf.destroy();
     setPreview(null);
   };
-  const report = {progress: setRecognition, error: setQueueError};
-  const retryRecognition = async (item: Submission) => {
-    setModerating(item.id);
-    setQueueError("");
-    try {
-      setRecognition(await (await curatorTools()).retryRecognition(item, report));
-    } catch (error) {
-      setQueueError((error as Error).message);
-    } finally {
-      setModerating(null);
-    }
+  const enqueueRecognition = (item: Submission) =>
+    setRecognitionQueue((jobs) =>
+      jobs.some((job) => job.id === item.id) || recognizing?.id === item.id ? jobs : [...jobs, item],
+    );
+  useEffect(() => {
+    if (recognizing || recognitionQueue.length === 0) return;
+    const [next, ...rest] = recognitionQueue;
+    setRecognitionQueue(rest);
+    setRecognizing(next);
+    void curatorTools()
+      .then((tools) => tools.retryRecognition(next, {progress: setRecognition, error: setQueueError}))
+      .then((message) => setRecognitionLog((log) => [message, ...log]))
+      .catch((error: Error) => setRecognitionLog((log) => [`№ ${next.number}: ${error.message}`, ...log]))
+      .finally(() => {
+        setRecognizing(null);
+        setRecognition("");
+      });
+  }, [recognizing, recognitionQueue]);
+  // Closing the tab would stop recognition halfway; ask first.
+  useEffect(() => {
+    if (!recognizing && recognitionQueue.length === 0) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [recognizing, recognitionQueue]);
+  const approve = async (item: Submission) => {
+    await approveSubmission(item.id);
+    enqueueRecognition(item);
   };
   const moderate = async (item: Submission, action: "approve" | "reject") => {
     setModerating(item.id);
     setQueueError("");
     try {
-      if (action === "approve")
-        setRecognition(await (await curatorTools()).approveWithRecognition(item, report));
+      if (action === "approve") await approve(item);
       else
         await rejectSubmission(
           item.id,
@@ -954,6 +974,20 @@ function Upload({onBack}: {onBack: () => void}) {
       setModerating(null);
       refreshQueue();
     }
+  };
+  const approveAll = async () => {
+    const pending = (queue ?? []).filter((item) => item.status === "pending");
+    setQueueError("");
+    for (const item of pending) {
+      setModerating(item.id);
+      try {
+        await approve(item);
+      } catch (error) {
+        setQueueError(`№ ${item.number}: ${(error as Error).message}`);
+      }
+    }
+    setModerating(null);
+    refreshQueue();
   };
   return (
     <main id="main" className="upload-page shell">
@@ -1410,10 +1444,28 @@ function Upload({onBack}: {onBack: () => void}) {
                   {queueError}
                 </p>
               )}
-              {recognition && (
+              {__ADMIN__ && (queue ?? []).some((item) => item.status === "pending") && (
+                <button
+                  className="primary-button approve-all"
+                  type="button"
+                  disabled={moderating !== null}
+                  onClick={() => void approveAll()}
+                >
+                  Одобрить все ({(queue ?? []).filter((item) => item.status === "pending").length})
+                </button>
+              )}
+              {recognizing && (
                 <p className="curator-message" role="status">
-                  {recognition}
+                  {recognition || `Готовим № ${recognizing.number} к распознаванию…`}
+                  {recognitionQueue.length > 0 && ` · в очереди ещё ${recognitionQueue.length}`}
                 </p>
+              )}
+              {recognitionLog.length > 0 && (
+                <ul className="recognition-log">
+                  {recognitionLog.map((line, index) => (
+                    <li key={index}>{line}</li>
+                  ))}
+                </ul>
               )}
               {queue.length === 0 ? (
                 <p>Новых заявок нет.</p>
@@ -1454,8 +1506,8 @@ function Upload({onBack}: {onBack: () => void}) {
                           <button
                             className="outline-button"
                             type="button"
-                            disabled={moderating !== null}
-                            onClick={() => void retryRecognition(item)}
+                            disabled={recognizing?.id === item.id || recognitionQueue.some((job) => job.id === item.id)}
+                            onClick={() => enqueueRecognition(item)}
                           >
                             Распознать подписи
                           </button>

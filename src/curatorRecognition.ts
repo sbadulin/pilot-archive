@@ -2,7 +2,7 @@
 // Loaded on demand in the admin build only; the public site never downloads it.
 import {openPdf} from "./pdf";
 import {printedPages} from "./readerLayout";
-import {approveSubmission, loadRecognizedSheets, loadSubmissionPdf, recognizeSubmissionSheet, type Submission} from "./ingestionClient";
+import {loadRecognizedSheets, loadSubmissionPdf, recognizeSubmissionSheet, type Submission} from "./ingestionClient";
 import {publishSearchIndex} from "./authorsPublish";
 
 export {publishSearchIndex};
@@ -105,21 +105,8 @@ const publishOrWarn = (report: Report, prefix: string) =>
     report.error(`${prefix} (${error.message}). Нажмите «Обновить поиск на сайте» на странице «Имена авторов».`),
   );
 
-// Approve an issue after recognizing its bylines; a failed recognition never blocks approval.
-export async function approveWithRecognition(item: Submission, report: Report): Promise<string> {
-  let summary: string;
-  try {
-    summary = recognitionSummary(await recognizeIssue(item, progressOf(item, report)));
-  } catch (error) {
-    summary = `Подписи не распознаны (${(error as Error).message}), выпуск одобрен без них.`;
-  }
-  await approveSubmission(item.id);
-  report.progress(`№ ${item.number} одобрен. ${summary}`);
-  await publishOrWarn(report, "Поиск на сайте не обновился");
-  return `№ ${item.number} одобрен. ${summary}`;
-}
-
-// Recognize the sheets an earlier run missed (e.g. when the AI balance ran out).
+// Recognize the sheets of an approved issue that have no recognition yet (all of them for a fresh
+// approval, the missed ones on a retry), then republish the site search.
 export async function retryRecognition(item: Submission, report: Report): Promise<string> {
   const result = await recognizeIssue(item, progressOf(item, report), true);
   if (result.sheets === 0) return `В № ${item.number} все листы уже распознаны.`;
