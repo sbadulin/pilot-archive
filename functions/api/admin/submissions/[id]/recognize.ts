@@ -1,5 +1,5 @@
 import { requireCurator, json } from '../../../_lib/auth';
-import { recognizeSheet } from '../../../_lib/recognition';
+import { recognizeSheet, restRunner } from '../../../_lib/recognition';
 import { creditId, creditsFromSheet } from '../../../../../src/authorNames';
 
 // Sheets already recognized, so a retry sends only the missing ones.
@@ -20,8 +20,10 @@ export async function onRequestGet(context: any) {
 export async function onRequestPost(context: any) {
   const denied = requireCurator(context);
   if (denied instanceof Response) return denied;
-  const { DB, AI } = context.env;
-  if (!DB || !AI) return json({ error: 'D1 или Workers AI не подключены.' }, { status: 503 });
+  const { DB, AI, CLOUDFLARE_AI_TOKEN, CLOUDFLARE_ACCOUNT_ID } = context.env;
+  // The REST API when its secrets are set (reliable); the Workers AI binding otherwise.
+  const ai = CLOUDFLARE_AI_TOKEN && CLOUDFLARE_ACCOUNT_ID ? restRunner(CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_AI_TOKEN) : AI;
+  if (!DB || !ai) return json({ error: 'D1 или Workers AI не подключены.' }, { status: 503 });
   const url = new URL(context.request.url);
   const sheet = Number(url.searchParams.get('sheet'));
   const printedPage = Number(url.searchParams.get('page'));
@@ -35,7 +37,7 @@ export async function onRequestPost(context: any) {
 
   let recognized;
   try {
-    recognized = await recognizeSheet(AI, image);
+    recognized = await recognizeSheet(ai, image);
   } catch (e) {
     const message = (e as Error).message;
     // Visible in `wrangler pages deployment tail`.
