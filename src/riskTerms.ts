@@ -168,7 +168,7 @@ export function mentionsMinor(text: string): boolean {
 
 export type RiskAction = "redact" | "redactMinor" | "lawyer" | "adult" | "review";
 
-// Порядок — от самого срочного к самому мягкому; отчёт сортирует по нему.
+// Порядок — от самого срочного к самому мягкому; в этом порядке идёт сводка отчёта.
 export const riskActionLabels: Record<RiskAction, string> = {
   redact: "Закрыть",
   redactMinor: "Закрыть: несовершеннолетние",
