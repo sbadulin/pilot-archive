@@ -7,13 +7,16 @@ import {publishSearchIndex} from "./authorsPublish";
 
 export {publishSearchIndex};
 
-export type RecognitionResult = {names: number; sheets: number; failed: number[]; stopped: string};
+export type RecognitionResult = {names: number; sheets: number; failed: number[]; stopped: string; reason: string};
+
+const ROUNDS = 3;
+const ROUND_PAUSE_MS = 5000;
 
 // Bylines are recognized before approval, while the PDF is still in the private bucket.
 // A retry sends only the sheets that have no recognition yet.
 export async function recognizeIssue(
   item: Submission,
-  onProgress: (done: number, total: number) => void,
+  onProgress: (done: number, total: number, round: number) => void,
   onlyMissing = false,
 ): Promise<RecognitionResult> {
   const recognized = new Set(onlyMissing ? await loadRecognizedSheets(item.id) : []);
@@ -29,44 +32,59 @@ export async function recognizeIssue(
       pdf.numPages,
       areas.flatMap((area, index) => (area > typical * 1.3 ? [index + 1] : [])),
     );
-    const queue = Array.from({length: pdf.numPages}, (_, index) => index + 1).filter(
+    let pending = Array.from({length: pdf.numPages}, (_, index) => index + 1).filter(
       (sheet) => !recognized.has(sheet),
     );
-    const total = queue.length;
-    const failed: number[] = [];
+    const total = pending.length;
+    const errors = new Map<number, string>();
     let stopped = "";
-    let done = 0;
     let names = 0;
-    onProgress(0, total);
-    const worker = async () => {
-      for (let sheet = queue.shift(); sheet; sheet = queue.shift()) {
-        try {
-          const page = await pdf.getPage(sheet);
-          // 150 dpi: enough for bylines, small enough to send.
-          const viewport = page.getViewport({scale: 150 / 72});
-          const canvas = document.createElement("canvas");
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
-          await page.render({canvas, viewport}).promise;
-          const jpeg = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
-          canvas.width = 0;
-          canvas.height = 0;
-          const result = await recognizeSubmissionSheet(item.id, sheet, printed.first(sheet), jpeg);
-          names += result.credits;
-        } catch (error) {
-          failed.push(sheet);
-          // Out of AI Gateway balance: every other sheet would fail the same way.
-          if ((error as Error).message.startsWith("Баланс")) {
-            stopped = (error as Error).message;
-            failed.push(...queue.splice(0));
-          }
-        }
-        done++;
-        onProgress(done, total);
-      }
+    const recognizeSheet = async (sheet: number) => {
+      const page = await pdf.getPage(sheet);
+      // 150 dpi: enough for bylines, small enough to send.
+      const viewport = page.getViewport({scale: 150 / 72});
+      const canvas = document.createElement("canvas");
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({canvas, viewport}).promise;
+      const jpeg = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
+      canvas.width = 0;
+      canvas.height = 0;
+      // Await first: `names += await …` would read names before the wait and lose parallel updates.
+      const result = await recognizeSubmissionSheet(item.id, sheet, printed.first(sheet), jpeg);
+      names += result.credits;
     };
-    await Promise.all([worker(), worker(), worker()]);
-    return {names, sheets: total, failed: failed.sort((a, b) => a - b), stopped};
+    // Models fail now and then under load, so failed sheets get two more rounds,
+    // after a pause and with fewer requests at once.
+    for (let round = 0; round < ROUNDS && pending.length && !stopped; round++) {
+      if (round > 0) await new Promise((resolve) => setTimeout(resolve, ROUND_PAUSE_MS));
+      const queue = [...pending];
+      const failed: number[] = [];
+      let done = 0;
+      onProgress(total - pending.length, total, round);
+      const worker = async () => {
+        for (let sheet = queue.shift(); sheet; sheet = queue.shift()) {
+          try {
+            await recognizeSheet(sheet);
+            errors.delete(sheet);
+            done++;
+          } catch (error) {
+            failed.push(sheet);
+            errors.set(sheet, (error as Error).message);
+            // Out of AI Gateway balance: every other sheet would fail the same way.
+            if ((error as Error).message.startsWith("Баланс")) {
+              stopped = (error as Error).message;
+              failed.push(...queue.splice(0));
+            }
+          }
+          onProgress(total - pending.length + done, total, round);
+        }
+      };
+      await Promise.all(Array.from({length: round === 0 ? 3 : 2}, worker));
+      pending = failed;
+    }
+    const reasons = [...new Set(errors.values())];
+    return {names, sheets: total, failed: pending.sort((a, b) => a - b), stopped, reason: reasons[0] ?? ""};
   } finally {
     void pdf.destroy();
   }
@@ -75,12 +93,12 @@ export async function recognizeIssue(
 export const recognitionSummary = (result: RecognitionResult) =>
   result.stopped
     ? result.stopped
-    : `Найдено подписей: ${result.names} на ${result.sheets} листах${result.failed.length ? `; не распознаны листы ${result.failed.join(", ")} — нажмите «Распознать подписи», чтобы повторить` : ""}.`;
+    : `Найдено подписей: ${result.names} на ${result.sheets} листах${result.failed.length ? `; не распознаны листы ${result.failed.join(", ")} (${result.reason}) — нажмите «Распознать подписи», чтобы повторить` : ""}.`;
 
 type Report = {progress: (text: string) => void; error: (text: string) => void};
 
-const progressOf = (item: Submission, report: Report) => (done: number, total: number) =>
-  report.progress(`Распознаём подписи в № ${item.number}: ${done} из ${total}`);
+const progressOf = (item: Submission, report: Report) => (done: number, total: number, round: number) =>
+  report.progress(`Распознаём подписи в № ${item.number}: ${done} из ${total}${round ? ` (повтор ${round})` : ""}`);
 
 const publishOrWarn = (report: Report, prefix: string) =>
   publishSearchIndex().catch((error: Error) =>

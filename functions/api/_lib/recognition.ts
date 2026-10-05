@@ -56,13 +56,33 @@ async function ask(ai: ModelRunner, model: string, jpegBase64: string): Promise<
   }
 }
 
+// Models fail now and then under load (rate limits, timeouts); one more try a moment later
+// usually works. A refusal or an empty balance will not change, so those are not retried.
+// One retry per model keeps the request under Cloudflare's 100-second response limit.
+const RETRY_DELAY_MS = 3000;
+async function askWithRetry(ai: ModelRunner, model: string, jpegBase64: string): Promise<SheetRecognition> {
+  try {
+    return await ask(ai, model, jpegBase64);
+  } catch (e) {
+    if (/moderation|insufficient balance|402/i.test((e as Error).message)) throw e;
+    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+    return ask(ai, model, jpegBase64);
+  }
+}
+
 // Gemini first; Claude when Gemini refuses (content moderation), fails or answers garbage.
 export async function recognizeSheet(ai: ModelRunner, jpegBase64: string): Promise<SheetRecognition> {
   try {
-    return await ask(ai, PRIMARY, jpegBase64);
+    return await askWithRetry(ai, PRIMARY, jpegBase64);
   } catch (e) {
-    const fallback = await ask(ai, FALLBACK, jpegBase64);
     const reason = (e as Error).message;
+    let fallback: SheetRecognition;
+    try {
+      fallback = await askWithRetry(ai, FALLBACK, jpegBase64);
+    } catch (fallbackError) {
+      // Both answers are needed to tell a Gemini outage from a Claude one.
+      throw new Error(`Gemini: ${reason.slice(0, 160)}; Claude: ${(fallbackError as Error).message.slice(0, 160)}`);
+    }
     return { ...fallback, fallbackReason: /moderation/i.test(reason) ? 'refused' : reason.slice(0, 200) };
   }
 }
