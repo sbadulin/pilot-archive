@@ -24,7 +24,28 @@ export const PROMPT = `Это скан страницы российской м�
 // env.AI in a Function, or a REST adapter with the same shape in scripts.
 export type ModelRunner = { run(model: string, input: unknown): Promise<any> };
 
-export type SheetRecognition = { model: string; result: any; usage?: unknown; fallbackReason?: string };
+// Cloudflare AI over the REST API with an API token, shaped like env.AI. In production the
+// Workers AI binding keeps answering «2018: Invalid User Credentials» for third-party models
+// (both Gemini and Claude, in bursts); the REST API has read the whole archive without it.
+export function restRunner(accountId: string, token: string): ModelRunner {
+  const api = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai`;
+  return {
+    async run(model, input) {
+      const anthropic = model.startsWith('anthropic/');
+      const res = await fetch(`${api}${anthropic ? '/v1/messages' : '/run'}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(anthropic ? { model, ...(input as object) } : { model, input }),
+      });
+      const json: any = await res.json().catch(() => ({}));
+      if (!res.ok || json.success === false || json.type === 'error')
+        throw new Error(`${res.status} ${JSON.stringify(json.errors ?? json.error ?? json).slice(0, 200)}`);
+      return json.result ?? json;
+    },
+  };
+}
+
+export type SheetRecognition ={ model: string; result: any; usage?: unknown; fallbackReason?: string };
 
 const parseJson = (text: string) => JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
 
