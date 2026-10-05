@@ -32,6 +32,7 @@ import {adminUrl, isPublicSite, manifestUrl} from "./config";
 import {groupSpreads, printedPages} from "./readerLayout";
 import {Checkbox} from "./checkbox";
 import {AuthorSearch} from "./authorSearchView";
+import {AdultBadge} from "./ageGate";
 import {openPdf} from "./pdf";
 
 // Curator tools are split out and exist only in the admin build (__ADMIN__ is set by build.mjs):
@@ -474,6 +475,7 @@ function Reader({
             № {issue.number} <span>({issue.serial})</span>
           </b>
           <span>{issue.dateLabel}</span>
+          <AdultBadge />
         </div>
         <a
           className="text-button download"
@@ -1735,6 +1737,7 @@ export default function Home() {
             <span>Добавить выпуск</span>
           </button>
         )}
+        <AdultBadge />
       </header>
       {screen.kind === "upload" ? (
         __ADMIN__ ? <Upload onBack={back} /> : null

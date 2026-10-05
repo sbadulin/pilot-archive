@@ -1,5 +1,9 @@
 import { readFileSync } from 'node:fs';
-import { test, expect } from '@playwright/test';
+import { test, expect, type BrowserContext } from '@playwright/test';
+
+// The age gate has its own spec; here every visitor has already confirmed being 18+.
+const confirmAdult = (context: BrowserContext) => context.addInitScript(() => localStorage.setItem('pilot-adult-confirmed', '1'));
+test.beforeEach(({ context }) => confirmAdult(context));
 
 test('archive reads restored PDF with local worker and navigates every view', async ({ page }) => {
   const remote: string[] = [];
@@ -40,6 +44,7 @@ test('year deep link and mobile layout remain usable', async ({ page }) => {
 
 test('pinch zoom on mobile re-renders the page like the zoom buttons', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await confirmAdult(context);
   const page = await context.newPage();
   await page.goto('/#year-2000');
   await page.locator('.cover-button').first().click();
