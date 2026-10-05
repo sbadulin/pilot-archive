@@ -10,7 +10,7 @@
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { findRisks, riskCategoryLabels } from '../src/riskTerms.ts';
+import { findRisks, mentionsMinor, recommendAction, riskActionLabels, riskCategoryLabels } from '../src/riskTerms.ts';
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => {
@@ -52,7 +52,8 @@ for (const dir of issueDirs) {
       ].filter(([, value]) => typeof value === 'string' && value.trim());
       const matches = fields.flatMap(([field, value]) => findRisks(value).map(match => ({ ...match, field })));
       if (!matches.length) continue;
-      findings.push({ sheet, article, matches, strong: matches.some(match => !match.weak) });
+      const minor = fields.some(([, value]) => mentionsMinor(value));
+      findings.push({ sheet, article, matches, minor, action: recommendAction(matches, minor) });
     }
   }
 }
@@ -70,6 +71,11 @@ const totals = Object.keys(riskCategoryLabels).map(category => {
     weak: inCategory.filter(finding => finding.matches.every(match => match.category !== category || match.weak)).length,
   };
 });
+
+const actionTotals = Object.keys(riskActionLabels).map(action => ({
+  action,
+  count: findings.filter(finding => finding.action === action).length,
+}));
 
 const byIssue = new Map();
 for (const finding of findings) {
@@ -92,27 +98,27 @@ const issueSections = [...byIssue.values()]
     const rows = items
       .sort((a, b) => a.sheet.sheet - b.sheet.sheet)
       .map(
-        ({ sheet, article, matches, strong }) => `
-        <tr class="${strong ? 'strong' : 'weak'}">
+        ({ sheet, article, matches, minor, action }) => `
+        <tr class="${action}">
           <td><a href="${pageLink(sheet)}" target="_blank" rel="noopener">лист ${sheet.sheet}</a>${sheet.printedPage && sheet.printedPage !== sheet.sheet ? `<br><small>с. ${escapeHtml(sheet.printedPage)}</small>` : ''}</td>
           <td><b>${escapeHtml(article.title || '(без заголовка)')}</b><br><small>${escapeHtml(article.kind === 'letter' ? 'письмо' : 'статья')}${article.byline ? ` · ${escapeHtml(article.byline)}` : ''}</small></td>
           <td><ul>${matchList(matches)}</ul></td>
-          <td class="decision"></td>
+          <td class="decision"><span class="action">${escapeHtml(riskActionLabels[action])}</span>${minor && action !== 'redactMinor' ? '<br><small>упомянут возраст до 18</small>' : ''}</td>
         </tr>`,
       )
       .join('');
     return `
-    <section class="${items.some(item => item.strong) ? 'strong' : 'weak'}">
+    <section class="${items.every(item => item.action === 'review') ? 'review' : 'act'}">
       <h2>№ ${escapeHtml(sheet.number)} (${escapeHtml(sheet.serial)}) · ${escapeHtml(dateLabel(sheet.date))}</h2>
       <table>
-        <thead><tr><th>Страница</th><th>Материал</th><th>Совпадения</th><th>Решение</th></tr></thead>
+        <thead><tr><th>Страница</th><th>Материал</th><th>Совпадения</th><th>Рекомендация</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </section>`;
   })
   .join('');
 
-const strongCount = findings.filter(finding => finding.strong).length;
+const actionable = findings.filter(finding => finding.action !== 'review').length;
 const html = `<!doctype html>
 <html lang="ru">
 <head>
@@ -131,7 +137,11 @@ const html = `<!doctype html>
   th, td { text-align: left; vertical-align: top; padding: 8px; border-top: 1px solid var(--line); }
   th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
   td:first-child { white-space: nowrap; }
-  td.decision { width: 120px; }
+  td.decision { width: 150px; }
+  .action { font-weight: 600; }
+  tr.redact .action, tr.redactMinor .action { color: var(--strong); }
+  tr.lawyer .action { color: var(--weak); }
+  tr.adult .action, tr.review .action { color: var(--muted); }
   ul { margin: 0; padding: 0; list-style: none; }
   li + li { margin-top: 4px; }
   .tag { display: inline-block; padding: 1px 6px; border-radius: 4px; background: var(--tag); font-size: 12px; }
@@ -141,28 +151,32 @@ const html = `<!doctype html>
   a { color: inherit; }
   .summary td:not(:first-child), .summary th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
   .summary { max-width: 520px; }
+  .summary + .summary { margin-top: 24px; }
   label { display: inline-flex; gap: 6px; align-items: center; margin: 16px 0 0; cursor: pointer; }
-  body:has(#hide-weak:checked) tr.weak, body:has(#hide-weak:checked) section.weak { display: none; }
+  body:has(#hide-review:checked) tr.review, body:has(#hide-review:checked) section.review { display: none; }
   .note { border-left: 3px solid var(--line); padding: 4px 12px; color: var(--muted); }
-  @media (max-width: 640px) { td.decision, th:last-child { display: none; } }
-  @media print { label { display: none; } td.decision { border: 1px solid var(--line); } }
+  @media print { label { display: none; } }
 </style>
 </head>
 <body>
 <h1>Риски архива «Первого Пилота»</h1>
-<p class="lead">Проверено ${sheetCount} листов ${issueDirs.length} выпусков, ${articleCount} материалов. Под подозрением ${findings.length}, из них с сильными совпадениями ${strongCount}. Сформировано ${new Date().toLocaleString('ru-RU')}.</p>
+<p class="lead">Проверено ${sheetCount} листов ${issueDirs.length} выпусков, ${articleCount} материалов. Под подозрением ${findings.length}, из них требуют действия ${actionable}. Сформировано ${new Date().toLocaleString('ru-RU')}.</p>
 <p class="note">${fullText ? 'Проверены заголовки, подписи и полный текст заметок.' : 'Проверены только заголовки и подписи: полного текста в кэше нет, поэтому материал с нейтральным заголовком сюда не попадёт.'}
 Листы «Пейджера» (${skipped.pager}) не распознавались и не проверены. Телепрограмма — ${skipped.tv} листов${skipped.failed ? `, не распознано ${skipped.failed} листов` : ''}.
-Совпадение — повод посмотреть материал, а не вывод о нарушении.</p>
+Совпадение — повод посмотреть материал, а не вывод о нарушении. Рекомендация «Оставить с 18+» предполагает, что на сайте стоит возрастная маркировка.</p>
+<table class="summary">
+  <thead><tr><th>Рекомендация</th><th>Материалов</th></tr></thead>
+  <tbody>${actionTotals.map(total => `<tr><td>${escapeHtml(riskActionLabels[total.action])}</td><td>${total.count}</td></tr>`).join('')}</tbody>
+</table>
 <table class="summary">
   <thead><tr><th>Категория</th><th>Сильные</th><th>Только слабые</th></tr></thead>
   <tbody>${totals.map(total => `<tr><td>${escapeHtml(riskCategoryLabels[total.category])}</td><td>${total.strong}</td><td>${total.weak}</td></tr>`).join('')}</tbody>
 </table>
-<label><input type="checkbox" id="hide-weak"> Скрыть материалы только со слабыми совпадениями</label>
+<label><input type="checkbox" id="hide-review"> Скрыть материалы с рекомендацией «Посмотреть»</label>
 ${issueSections || '<p>Совпадений нет.</p>'}
 </body>
 </html>
 `;
 
 await writeFile(output, html);
-console.log(`Checked ${sheetCount} sheets, ${articleCount} articles: ${findings.length} flagged (${strongCount} strong). Report: ${output}`);
+console.log(`Checked ${sheetCount} sheets, ${articleCount} articles: ${findings.length} flagged, ${actionable} need action. Report: ${output}`);

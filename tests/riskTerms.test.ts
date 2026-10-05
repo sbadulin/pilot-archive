@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { findRisks } from '../src/riskTerms.ts';
+import { findRisks, mentionsMinor, recommendAction } from '../src/riskTerms.ts';
 
 const categories = (text: string) => findRisks(text).map(match => `${match.category}${match.weak ? '?' : ''}`);
 
@@ -43,6 +43,31 @@ test('weak terms are marked and give way to strong ones of the same category', (
 test('overlapping terms of one category count once, other categories stay', () => {
   assert.deepEqual(categories('наркоманы'), ['drugs']);
   assert.deepEqual(categories('сексуальных меньшинств'), ['lgbt', 'sexual']);
+});
+
+test('ages under 18 and school words mark a minor', () => {
+  assert.ok(mentionsMinor('Скарлетт (15) и Мей (14/160).'));
+  assert.ok(mentionsMinor('ищет друга не младше 17 лет'));
+  assert.ok(mentionsMinor('Петька из 8 класса'));
+  assert.ok(mentionsMinor('Я девятиклассница'));
+  assert.ok(mentionsMinor('Школьники на каникулах'));
+});
+
+test('adult ages, years and page numbers do not mark a minor', () => {
+  assert.ok(!mentionsMinor('Ей 23 года'));
+  assert.ok(!mentionsMinor('Это было 18 лет назад'));
+  assert.ok(!mentionsMinor('Д-539, Видео 102 мин.'));
+  assert.ok(!mentionsMinor('стр. 12, 2000 год'));
+});
+
+test('actions follow the law: always banned, 18+ allowed, minors redacted', () => {
+  const action = (text: string) => recommendAction(findRisks(text), mentionsMinor(text));
+  assert.equal(action('Наркотики и мы'), 'redact');
+  assert.equal(action('Две сексуальные девушки'), 'adult');
+  assert.equal(action('Две сексуальные девушки, нам по 15 лет'), 'redactMinor');
+  assert.equal(action('Уроки охмурения для школьниц'), 'lawyer');
+  assert.equal(action('Уроки охмурения'), 'review');
+  assert.equal(action('Это пиздец'), 'lawyer');
 });
 
 test('the excerpt keeps the original spelling around the match', () => {

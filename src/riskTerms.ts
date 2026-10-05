@@ -20,7 +20,7 @@ export const riskCategoryLabels: Record<RiskCategory, string> = {
   lgbt: "ЛГБТ",
   drugs: "Наркотики",
   suicide: "Суицид",
-  sexual: "Сексуальный контент (18+)",
+  sexual: "Сексуальный контент",
   childfree: "Чайлдфри и аборты",
   extremism: "Экстремизм, терроризм, нацизм",
   profanity: "Мат",
@@ -149,4 +149,44 @@ export function findRisks(text: string): RiskMatch[] {
     matches.push({ category, term, weak, index: found.index, excerpt: excerptAround(text, found.index, found[0].length) });
   }
   return matches.map(({ index: _index, ...match }) => match);
+}
+
+// Сексуальный контент законен с маркировкой 18+, но не рядом с несовершеннолетними: в
+// молодёжной газете письма и объявления часто подписаны возрастом («Скарлетт (15)»).
+const minorPatterns = [
+  /\(\s*(?:[5-9]|1[0-7])\s*(?:\)|\/|,|лет|год)/u,
+  /(?<![\d.,])(?:[5-9]|1[0-7])\s*(?:-?ти\s+)?(?:лет|года|годам|годиков)(?!\p{L})/u,
+  /(?<![\d.,])(?:[1-9]|1[01])\s*-?(?:й|м|го|ом)?\s+класс/u,
+  /(?<![\p{L}-])(?:школьни|ученица|ученицы|несовершеннолет|малолет|подрост|тинейджер)/u,
+  /классни(?:к|ц)/u,
+];
+
+export function mentionsMinor(text: string): boolean {
+  const normalized = normalizeForRisk(text);
+  return minorPatterns.some(pattern => pattern.test(normalized));
+}
+
+export type RiskAction = "redact" | "redactMinor" | "lawyer" | "adult" | "review";
+
+// Порядок — от самого срочного к самому мягкому; отчёт сортирует по нему.
+export const riskActionLabels: Record<RiskAction, string> = {
+  redact: "Закрыть",
+  redactMinor: "Закрыть: несовершеннолетние",
+  lawyer: "Показать юристу",
+  adult: "Оставить с 18+",
+  review: "Посмотреть",
+};
+
+// Запреты на эти темы действуют для любой аудитории, маркировка 18+ их не снимает.
+const alwaysRedacted = new Set<RiskCategory>(["lgbt", "drugs", "suicide", "childfree", "extremism"]);
+
+export function recommendAction(matches: RiskMatch[], minor: boolean): RiskAction {
+  const strong = matches.filter(match => !match.weak);
+  if (strong.some(match => alwaysRedacted.has(match.category))) return "redact";
+  const sexualStrong = strong.some(match => match.category === "sexual");
+  if (sexualStrong && minor) return "redactMinor";
+  if (strong.some(match => match.category === "profanity")) return "lawyer";
+  if (minor && matches.some(match => match.category === "sexual")) return "lawyer";
+  if (sexualStrong) return "adult";
+  return "review";
 }
