@@ -38,6 +38,8 @@ export async function onRequestPost(context: any) {
     recognized = await recognizeSheet(AI, image);
   } catch (e) {
     const message = (e as Error).message;
+    // Visible in `wrangler pages deployment tail`.
+    console.error(`recognize ${context.params.id} sheet ${sheet}: ${message}`);
     // An empty AI Gateway balance fails every sheet; the browser stops and says so.
     if (/insufficient balance|402/i.test(message))
       return json({ error: 'Баланс AI Gateway закончился — пополните его и нажмите «Распознать подписи».', code: 'balance' }, { status: 402 });
