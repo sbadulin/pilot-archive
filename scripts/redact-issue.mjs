@@ -64,18 +64,24 @@ async function readWords(sheet) {
 }
 
 // Фраза может начинаться с середины строки и переходить на следующую, в том числе через
-// перенос («садо-» / «мазо»). Возвращает по прямоугольнику на каждую задетую строку.
+// перенос («садо-» / «мазо»). Тире и одиночные знаки после нормализации пусты: при сравнении
+// они пропускаются, но в рамку попадают, в том числе висящие в конце строки («подонки, –»).
+// Возвращает по прямоугольнику на каждую задетую строку.
 function findPhrase(words, phrase) {
   const target = phrase.split(/\s+/).map(normalize).filter(Boolean).join(' ');
   for (let start = 0; start < words.length; start += 1) {
+    if (!words[start].word) continue;
     let text = '';
     for (let end = start; end < words.length && text.length <= target.length; end += 1) {
       const word = words[end].word;
+      if (!word) continue;
       text = text.endsWith('-') ? text.slice(0, -1) + word : text ? `${text} ${word}` : word;
       const done = text === target || (text.startsWith(target) && end === start);
       if (!done) continue;
+      let last = end;
+      while (words[last + 1] && !words[last + 1].word && words[last + 1].line === words[last].line) last += 1;
       const lines = new Map();
-      for (const item of words.slice(start, end + 1)) {
+      for (const item of words.slice(start, last + 1)) {
         const box = lines.get(item.line);
         lines.set(item.line, box
           ? { left: Math.min(box.left, item.left), top: Math.min(box.top, item.top), right: Math.max(box.right, item.right), bottom: Math.max(box.bottom, item.bottom) }
@@ -108,6 +114,10 @@ async function boxesFor(item) {
   return { boxes: found.map(box => ({ left: box.left - 5, top: box.top - 6, right: box.right + 5, bottom: box.bottom + 6 })), label: false };
 }
 
+// Статус решения: approved — закрасить; keep — рассмотрено и оставлено; иначе ждёт решения.
+const status = item => (item.approved ? 'ok' : item.keep ? 'keep' : 'wait');
+const colors = { ok: '#d0261b', keep: '#8c8a83', wait: '#e08a00' };
+const statusLabels = { ok: 'Закрасить', keep: 'Оставить', wait: 'Ждёт решения' };
 const items = [];
 for (const [index, item] of spec.items.entries()) items.push({ ...item, number: index + 1, ...(await boxesFor(item)) });
 const sheets = [...new Set(items.map(item => item.sheet))].sort((a, b) => a - b);
@@ -128,9 +138,9 @@ if (!apply) {
     const draw = items
       .filter(item => item.sheet === sheet)
       .flatMap(item => item.boxes.flatMap(box => [
-        '-stroke', item.approved ? '#d0261b' : '#e08a00', '-strokewidth', '3', '-fill', 'none',
+        '-stroke', colors[status(item)], '-strokewidth', '3', '-fill', 'none',
         '-draw', `rectangle ${Math.round(box.left * scale)},${Math.round(box.top * scale)} ${Math.round(box.right * scale)},${Math.round(box.bottom * scale)}`,
-        '-stroke', 'none', '-fill', item.approved ? '#d0261b' : '#e08a00', '-font', font, '-pointsize', '22',
+        '-stroke', 'none', '-fill', colors[status(item)], '-font', font, '-pointsize', '22',
         '-annotate', `+${Math.round(box.right * scale) + 4}+${Math.round(box.top * scale) + 18}`, String(item.number),
       ]));
     await run('magick', [await renderPage(sheet, 120), ...draw, '-quality', '82', join(out, `sheet-${pad(sheet)}.jpg`)]);
@@ -139,13 +149,13 @@ if (!apply) {
   const html = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Закраска на одобрение</title>
 <style>body{margin:0 auto;max-width:1000px;padding:24px 16px;font:15px/1.45 system-ui,sans-serif;background:#fbfaf7;color:#1d1b18}
 h1{font-size:22px}h2{font-size:17px;margin:32px 0 8px}img{width:100%;border:1px solid #ddd8cf}ol{padding-left:20px}li{margin:6px 0}
-.ok{color:#d0261b;font-weight:600}.wait{color:#b46a00;font-weight:600}small{color:#6b665e}</style></head><body>
+.ok{color:#d0261b;font-weight:600}.wait{color:#b46a00;font-weight:600}.keep{color:#8c8a83;font-weight:600}small{color:#6b665e}</style></head><body>
 <h1>Закраска на одобрение</h1>
-<p>Красная рамка — решение одобрено и будет закрашено, оранжевая — ждёт решения. Номер рядом с рамкой — номер в списке.</p>
-${sheets.map(sheet => `<h2>Лист ${sheet}</h2><ol>${items.filter(item => item.sheet === sheet).map(item => `<li value="${item.number}"><span class="${item.approved ? 'ok' : 'wait'}">${item.approved ? 'Закрасить' : 'Ждёт решения'}</span> · ${escape(item.find ? `слово или фраза «${item.find}»` : item.article ? `материал «${item.article}» целиком` : 'область')}<br><small>${escape(item.reason)}</small></li>`).join('')}</ol><img src="review/sheet-${pad(sheet)}.jpg" alt="Лист ${sheet}">`).join('')}
+<p>Красная рамка — будет закрашено, серая — рассмотрено и оставлено, оранжевая — ждёт решения. Номер рядом с рамкой — номер в списке.</p>
+${sheets.map(sheet => `<h2>Лист ${sheet}</h2><ol>${items.filter(item => item.sheet === sheet).map(item => `<li value="${item.number}"><span class="${status(item)}">${statusLabels[status(item)]}</span> · ${escape(item.find ? `слово или фраза «${item.find}»` : item.article ? `материал «${item.article}» целиком` : 'область')}<br><small>${escape(item.reason)}</small></li>`).join('')}</ol><img src="review/sheet-${pad(sheet)}.jpg" alt="Лист ${sheet}">`).join('')}
 </body></html>`;
   await writeFile(join(dir, 'review.html'), html);
-  console.log(`${items.length} decisions on ${sheets.length} sheets, ${items.filter(item => item.approved).length} approved. Review: ${join(dir, 'review.html')}`);
+  console.log(`${items.length} decisions on ${sheets.length} sheets, ${items.filter(item => item.approved).length} approved, ${items.filter(item => item.keep).length} kept. Review: ${join(dir, 'review.html')}`);
 } else {
   const approved = items.filter(item => item.approved);
   const changed = [...new Set(approved.map(item => item.sheet))];
