@@ -1,5 +1,5 @@
 // Ищет в распознанном архиве материалы, которые по нынешним законам могут потребовать
-// изъятия или маркировки, и пишет HTML-отчёт для куратора и юриста.
+// изъятия или маркировки, и пишет HTML-отчёт для куратора.
 //
 //   npm run risks:scan                                   # кэш подписей авторов → risk-report.html
 //   npm run risks:scan -- --cache <dir> --out <file>
@@ -140,7 +140,7 @@ const html = `<!doctype html>
   td.decision { width: 150px; }
   .action { font-weight: 600; }
   tr.redact .action, tr.redactMinor .action { color: var(--strong); }
-  tr.lawyer .action { color: var(--weak); }
+  tr.pointwise .action { color: var(--weak); }
   tr.adult .action, tr.review .action { color: var(--muted); }
   ul { margin: 0; padding: 0; list-style: none; }
   li + li { margin-top: 4px; }
