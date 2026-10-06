@@ -17,6 +17,7 @@
     "catalog:generate": "node scripts/generate-base-catalog.mjs",
     "manifest:rebuild": "node --experimental-strip-types scripts/rebuild-manifest.mjs",
     "archive:migrate": "node --experimental-strip-types scripts/migrate-published-to-archive.mjs",
+    "risks:scan": "node --experimental-strip-types scripts/scan-risks.mjs",
     "build:all": "npm run build && npm run build:admin",
     "check": "npm run typecheck && npm test && npm run verify:archive && npm run build:all && node scripts/verify-build.mjs",
     "test:browser": "playwright test"
