@@ -14,7 +14,8 @@ export type RiskCategory =
   | "sexual"
   | "childfree"
   | "extremism"
-  | "profanity";
+  | "profanity"
+  | "politics";
 
 export const riskCategoryLabels: Record<RiskCategory, string> = {
   lgbt: "ЛГБТ",
@@ -24,6 +25,7 @@ export const riskCategoryLabels: Record<RiskCategory, string> = {
   childfree: "Чайлдфри и аборты",
   extremism: "Экстремизм, терроризм, нацизм",
   profanity: "Мат",
+  politics: "Политика и полемика",
 };
 
 type TermList = { strong: string[]; weak?: string[] };
@@ -78,7 +80,7 @@ const terms: Record<RiskCategory, TermList> = {
       "ичкери", "ваххаб", "шахид", "аль-каид", "талибан", "свидетели иеговы", "свидетелей иеговы",
       "сатанист", "сатанизм", "джихад",
     ],
-    weak: ["сатан", "чечен", "боевик", "теракт", "взрывчат", "бомб", "анархи"],
+    weak: ["сатан", "боевик", "теракт", "взрывчат", "бомб", "анархи"],
   },
   profanity: {
     strong: [
@@ -87,6 +89,22 @@ const terms: Record<RiskCategory, TermList> = {
       "отъеб", "съеб", "долбоеб", "долбоёб", "бля=", "блять", "бляд",
     ],
     weak: ["сука", "сучк", "мудак", "мудил", "говн", "жоп", "срать", "дерьм"],
+  },
+  // Здесь закон смотрит на позицию автора, а не на слова: дискредитация армии, неуважение
+  // к власти и символам, призывы к отделению территорий. Словарь только приводит к тексту.
+  politics: {
+    strong: [
+      "путин", "ельцин", "кремл", "чечн", "чеченск", "федералы=", "федеральные войска",
+      "дедовщин", "армейск", "госдум", "депутат", "губернатор", "оппозици", "митинг", "пикет",
+      "революци", "коммунист", "зюганов", "жириновск", "явлинск", "лимонов", "навальн",
+      "нато=", "украин", "крым", "грузин", "кгб=", "фсб=", "спецслужб", "цензур", "пропаганд",
+      "сепаратис", "независимост",
+    ],
+    weak: [
+      // Не основа «власт»: она находит «Властелина колец».
+      "власть=", "власти=", "властей=", "властям=", "властями=", "президент", "выборы=", "выборах=", "выборов=", "армия=", "армии=", "армию=",
+      "солдат", "войн", "омон", "милици", "америк", "сша=", "флаг", "гимн", "герб",
+    ],
   },
 };
 
@@ -166,12 +184,13 @@ export function mentionsMinor(text: string): boolean {
   return minorPatterns.some(pattern => pattern.test(normalized));
 }
 
-export type RiskAction = "redact" | "redactMinor" | "lawyer" | "adult" | "review";
+export type RiskAction = "redact" | "redactMinor" | "politics" | "lawyer" | "adult" | "review";
 
 // Порядок — от самого срочного к самому мягкому; в этом порядке идёт сводка отчёта.
 export const riskActionLabels: Record<RiskAction, string> = {
   redact: "Закрыть",
   redactMinor: "Закрыть: несовершеннолетние",
+  politics: "Прочитать: политика",
   lawyer: "Показать юристу",
   adult: "Оставить с 18+",
   review: "Посмотреть",
@@ -185,6 +204,7 @@ export function recommendAction(matches: RiskMatch[], minor: boolean): RiskActio
   if (strong.some(match => alwaysRedacted.has(match.category))) return "redact";
   const sexualStrong = strong.some(match => match.category === "sexual");
   if (sexualStrong && minor) return "redactMinor";
+  if (strong.some(match => match.category === "politics")) return "politics";
   if (strong.some(match => match.category === "profanity")) return "lawyer";
   if (minor && matches.some(match => match.category === "sexual")) return "lawyer";
   if (sexualStrong) return "adult";

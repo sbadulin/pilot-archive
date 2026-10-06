@@ -70,6 +70,17 @@ test('actions follow the law: always banned, 18+ allowed, minors redacted', () =
   assert.equal(action('Это пиздец'), 'lawyer');
 });
 
+test('politics sends an article to be read, weak political words only to a look', () => {
+  const action = (text: string) => recommendAction(findRisks(text), mentionsMinor(text));
+  assert.equal(action('«Мы подождём, что скажет Путин...»'), 'politics');
+  assert.equal(action('Дедовщина в нашей части'), 'politics');
+  assert.equal(action('Письмо из Чечни'), 'politics');
+  assert.equal(action('Солдат вернулся домой'), 'review');
+  assert.equal(action('Тринадцатый воин'), 'review');
+  assert.deepEqual(categories('Когда мы увидим «Властелина колец»?'), []);
+  assert.deepEqual(categories('при Советской власти'), ['politics?']);
+});
+
 test('the excerpt keeps the original spelling around the match', () => {
   const [match] = findRisks('Начало. Затем — Наркотики и всё такое. Конец.');
   assert.match(match.excerpt, /Наркотики и всё такое/);
