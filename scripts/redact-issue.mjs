@@ -7,8 +7,12 @@
 //   { "items": [
 //     { "sheet": 6, "find": "садомазо", "reason": "…", "approved": true },      // слово или фраза
 //     { "sheet": 9, "article": "Сатанист или бизнесмен", "approved": false },   // материал целиком
-//     { "sheet": 2, "box": [10, 20, 40, 30] }                                   // проценты полосы
+//     { "sheet": 2, "box": [10, 20, 40, 30] },                                  // проценты полосы
+//     { "name": "Путин", "approved": true }                                     // фамилия на всех полосах
 //   ] }
+// Фамилия ищется только с заглавной буквы («путина» — ещё и ход лосося) и закрывается вместе
+// с именем или инициалами рядом. Число найденных упоминаний сверяется с текстом Claude:
+// если tesseract какое-то не прочитал, скрипт об этом предупредит.
 // Слова ищутся в words-NN.tsv (tesseract, 300 dpi), рамка материала — в sheet-NN.json.
 // Закраска делается в пикселях полосы, а не поверх неё: исходного изображения в новом
 // PDF нет. Исходный PDF не меняется; результат пишется рядом с кэшем.
@@ -60,7 +64,35 @@ async function readWords(sheet) {
       right: Number(cols[6]) + Number(cols[8]),
       bottom: Number(cols[7]) + Number(cols[9]),
       word: normalize(cols[11]),
+      raw: cols[11].replace(/^[^\p{L}\p{N}]+/u, ''),
     }));
+}
+
+// Упоминания фамилии на полосе: «Путин», «Путина», «В. В. Путина», «Владимир Путин», «Путин В. В.».
+function findName(words, name) {
+  const isInitial = word => word === 'в' || word === 'вв';
+  const boxes = [];
+  for (const [index, item] of words.entries()) {
+    if (!item.raw.startsWith(name)) continue;
+    let first = index;
+    let last = index;
+    while (first > index - 2 && words[first - 1]?.line === item.line && (isInitial(words[first - 1].word) || words[first - 1].word.startsWith('владимир'))) first -= 1;
+    while (last < index + 2 && words[last + 1]?.line === item.line && (isInitial(words[last + 1].word) || words[last + 1].word.startsWith('владимирович'))) last += 1;
+    const span = words.slice(first, last + 1);
+    boxes.push({
+      left: Math.min(...span.map(word => word.left)),
+      top: Math.min(...span.map(word => word.top)),
+      right: Math.max(...span.map(word => word.right)),
+      bottom: Math.max(...span.map(word => word.bottom)),
+    });
+  }
+  return boxes;
+}
+
+async function countNameInText(sheet, name) {
+  const data = JSON.parse(await readFile(join(dir, `sheet-${pad(sheet)}.json`), 'utf8'));
+  const text = data.result.articles.flatMap(article => [article.rubric, article.title, article.byline, article.text]).filter(Boolean).join('\n');
+  return (text.match(new RegExp(`(?<![\\p{L}])${name}`, 'gu')) ?? []).length;
 }
 
 // Фраза может начинаться с середины строки и переходить на следующую, в том числе через
@@ -119,7 +151,22 @@ const status = item => (item.approved ? 'ok' : item.keep ? 'keep' : 'wait');
 const colors = { ok: '#d0261b', keep: '#8c8a83', wait: '#e08a00' };
 const statusLabels = { ok: 'Закрасить', keep: 'Оставить', wait: 'Ждёт решения' };
 const items = [];
-for (const [index, item] of spec.items.entries()) items.push({ ...item, number: index + 1, ...(await boxesFor(item)) });
+const warnings = [];
+const pad5 = box => ({ left: box.left - 5, top: box.top - 6, right: box.right + 5, bottom: box.bottom + 6 });
+const allSheets = (await readdir(dir)).map(name => name.match(/^words-(\d+)\.tsv$/)?.[1]).filter(Boolean).map(Number).sort((a, b) => a - b);
+for (const [index, item] of spec.items.entries()) {
+  if (!item.name) {
+    items.push({ ...item, number: index + 1, ...(await boxesFor(item)) });
+    continue;
+  }
+  for (const sheet of allSheets) {
+    const found = findName(await readWords(sheet), item.name);
+    const expected = await countNameInText(sheet, item.name);
+    if (found.length < expected) warnings.push(`Лист ${sheet}: «${item.name}» в тексте ${expected} раз, tesseract нашёл ${found.length} — проверьте полосу и добавьте "box".`);
+    if (found.length) items.push({ ...item, sheet, number: index + 1, boxes: found.map(pad5), label: false });
+  }
+}
+for (const warning of warnings) console.warn(warning);
 const sheets = [...new Set(items.map(item => item.sheet))].sort((a, b) => a - b);
 const work = await mkdtemp(join(tmpdir(), 'redact-'));
 
@@ -151,8 +198,9 @@ if (!apply) {
 h1{font-size:22px}h2{font-size:17px;margin:32px 0 8px}img{width:100%;border:1px solid #ddd8cf}ol{padding-left:20px}li{margin:6px 0}
 .ok{color:#d0261b;font-weight:600}.wait{color:#b46a00;font-weight:600}.keep{color:#8c8a83;font-weight:600}small{color:#6b665e}</style></head><body>
 <h1>Закраска на одобрение</h1>
+${warnings.length ? `<p class="wait">${warnings.map(escape).join('<br>')}</p>` : ''}
 <p>Красная рамка — будет закрашено, серая — рассмотрено и оставлено, оранжевая — ждёт решения. Номер рядом с рамкой — номер в списке.</p>
-${sheets.map(sheet => `<h2>Лист ${sheet}</h2><ol>${items.filter(item => item.sheet === sheet).map(item => `<li value="${item.number}"><span class="${status(item)}">${statusLabels[status(item)]}</span> · ${escape(item.find ? `слово или фраза «${item.find}»` : item.article ? `материал «${item.article}» целиком` : 'область')}<br><small>${escape(item.reason)}</small></li>`).join('')}</ol><img src="review/sheet-${pad(sheet)}.jpg" alt="Лист ${sheet}">`).join('')}
+${sheets.map(sheet => `<h2>Лист ${sheet}</h2><ol>${items.filter(item => item.sheet === sheet).map(item => `<li value="${item.number}"><span class="${status(item)}">${statusLabels[status(item)]}</span> · ${escape(item.name ? `все упоминания «${item.name}» (${item.boxes.length} на листе)` : item.find ? `слово или фраза «${item.find}»` : item.article ? `материал «${item.article}» целиком` : 'область')}<br><small>${escape(item.reason)}</small></li>`).join('')}</ol><img src="review/sheet-${pad(sheet)}.jpg" alt="Лист ${sheet}">`).join('')}
 </body></html>`;
   await writeFile(join(dir, 'review.html'), html);
   console.log(`${items.length} decisions on ${sheets.length} sheets, ${items.filter(item => item.approved).length} approved, ${items.filter(item => item.keep).length} kept. Review: ${join(dir, 'review.html')}`);
