@@ -49,6 +49,22 @@ button, a { transition: background-color .15s, color .15s, border-color .15s; }
 .site-header nav a:focus-visible { outline: 2px solid var(--muted); outline-offset: 5px; }
 .header-add { display: inline-flex; align-items: center; gap: 10px; background: transparent; border: 1px solid var(--ink); margin-left: auto; padding: 12px 18px; font-weight: 500; font-size: 14px; }
 .header-add:hover { background: var(--ink); color: var(--paper); }
+.adult-badge { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 40px; height: 28px; padding: 0 6px; border: 2px solid var(--ink); font-family: 'Roboto Condensed', sans-serif; font-size: 14px; font-weight: 700; line-height: 1; cursor: default; }
+.site-header .adult-badge { margin-left: auto; }
+.site-header .header-add + .adult-badge { margin-left: 0; }
+.reader-title .adult-badge { min-width: 34px; height: 22px; font-size: 12px; align-self: center; }
+.age-gate { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 22px 22px; }
+.age-gate-card { width: 100%; max-width: 520px; padding: 36px 32px 32px; background: var(--paper); border: 1px solid var(--ink); border-bottom-width: 5px; display: grid; gap: 18px; justify-items: start; }
+.age-gate-mark { display: inline-block; padding: 6px 12px; background: var(--ink); color: var(--paper); font-family: 'Roboto Condensed', sans-serif; font-size: 30px; font-weight: 700; line-height: 1; }
+.age-gate h1 { font-family: 'Roboto Condensed', sans-serif; font-size: 30px; line-height: 1.1; }
+.age-gate p { font-size: 16px; line-height: 1.5; color: var(--muted); text-wrap: pretty; }
+.age-gate-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; }
+.age-gate-actions button { min-height: 48px; padding: 12px 22px; border: 1px solid var(--ink); font-weight: 500; font-size: 15px; }
+.age-gate-confirm { background: var(--ink); color: var(--paper); }
+.age-gate-confirm:hover { background: #33352e; }
+.age-gate-decline { background: transparent; }
+.age-gate-decline:hover { background: var(--secondary); }
+@media (max-width: 540px) { .age-gate-card { padding: 28px 20px 24px; } .age-gate h1 { font-size: 26px; } .age-gate-actions, .age-gate-actions button { width: 100%; } }
 .brand { display: inline-flex; }
 .brand > img { width: 500px; max-width: 100%; height: auto; object-fit: contain; object-position: left center; }
 .brand-small > img { width: 195px; height: 60px; object-fit: contain; object-position: left center; }
