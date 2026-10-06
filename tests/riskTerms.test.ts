@@ -65,9 +65,9 @@ test('actions follow the law: always banned, 18+ allowed, minors redacted', () =
   assert.equal(action('Наркотики и мы'), 'redact');
   assert.equal(action('Две сексуальные девушки'), 'adult');
   assert.equal(action('Две сексуальные девушки, нам по 15 лет'), 'redactMinor');
-  assert.equal(action('Уроки охмурения для школьниц'), 'lawyer');
+  assert.equal(action('Уроки охмурения для школьниц'), 'pointwise');
   assert.equal(action('Уроки охмурения'), 'review');
-  assert.equal(action('Это пиздец'), 'lawyer');
+  assert.equal(action('Это пиздец'), 'pointwise');
 });
 
 test('politics sends an article to be read, weak political words only to a look', () => {

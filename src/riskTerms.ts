@@ -1,6 +1,6 @@
 // Словарь для поиска материалов, которые по нынешним российским законам могут потребовать
 // изъятия или маркировки. Это фильтр для куратора, а не юридическая оценка: каждое
-// совпадение смотрит человек, а спорные случаи — юрист.
+// совпадение смотрит человек. Юриста у команды нет, поэтому спорное закрывается точечно.
 //
 // Термин — это основа слова: совпадение ищется с начала слова (`гомосексуал` найдёт
 // «гомосексуалисты»). Термин с `=` в конце должен совпасть со словом целиком (`гей=`
@@ -184,14 +184,14 @@ export function mentionsMinor(text: string): boolean {
   return minorPatterns.some(pattern => pattern.test(normalized));
 }
 
-export type RiskAction = "redact" | "redactMinor" | "politics" | "lawyer" | "adult" | "review";
+export type RiskAction = "redact" | "redactMinor" | "politics" | "pointwise" | "adult" | "review";
 
 // Порядок — от самого срочного к самому мягкому; в этом порядке идёт сводка отчёта.
 export const riskActionLabels: Record<RiskAction, string> = {
   redact: "Закрыть",
   redactMinor: "Закрыть: несовершеннолетние",
   politics: "Прочитать: политика",
-  lawyer: "Показать юристу",
+  pointwise: "Закрыть точечно",
   adult: "Оставить с 18+",
   review: "Посмотреть",
 };
@@ -205,8 +205,8 @@ export function recommendAction(matches: RiskMatch[], minor: boolean): RiskActio
   const sexualStrong = strong.some(match => match.category === "sexual");
   if (sexualStrong && minor) return "redactMinor";
   if (strong.some(match => match.category === "politics")) return "politics";
-  if (strong.some(match => match.category === "profanity")) return "lawyer";
-  if (minor && matches.some(match => match.category === "sexual")) return "lawyer";
+  if (strong.some(match => match.category === "profanity")) return "pointwise";
+  if (minor && matches.some(match => match.category === "sexual")) return "pointwise";
   if (sexualStrong) return "adult";
   return "review";
 }
