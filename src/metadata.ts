@@ -11,6 +11,15 @@ export const issues: Issue[] = [
   { id: 3, year: 2000, slug: 'issue-13-0078', number: '13', serial: '0078', date: '2000-03-29', dateLabel: '29 марта 2000', pages: 19, filename: 'пилот (1).pdf' },
   { id: 4, year: 2002, slug: 'issue-32-0201', number: '32', serial: '0201', date: '2002-12-01', dateLabel: 'декабрь 2002', pages: 32, filename: '2026.06.07_PP0201_2002.12.pdf' },
 ];
+const monthNames = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+// "Январь–август" from the issue dates, so the year summary follows the archive as issues are added.
+export function yearMonthsLabel(issues: Pick<Issue, 'date'>[]) {
+  const months = issues.map((issue) => Number(issue.date.slice(5, 7))).filter((month) => month >= 1 && month <= 12);
+  if (!months.length) return '';
+  const [first, last] = [Math.min(...months), Math.max(...months)];
+  const label = first === last ? monthNames[first - 1] : `${monthNames[first - 1]}–${monthNames[last - 1]}`;
+  return label[0].toUpperCase() + label.slice(1);
+}
 export const issuePdfUrl = (issue: Issue) => issue.pdfUrl ? assetUrl(issue.pdfUrl) : (issue.source === 'submission' ? `/api/issues/${issue.id}/file` : assetUrl(`/archive/${issue.year}/${issue.slug}/issue.pdf`));
 export const scanUrl = (issue: Issue, _page = 1) => issue.coverUrl ? assetUrl(issue.coverUrl) : assetUrl(`/archive/${issue.year}/${issue.slug}/cover.jpg`);
 export function parseFilename(name: string) {
