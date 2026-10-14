@@ -48,6 +48,7 @@ import {
   scanUrl,
   parseFilename,
   validateMetadata,
+  yearMonthsLabel,
   type Issue,
 } from "./metadata";
 import {
@@ -1689,6 +1690,9 @@ export default function Home() {
         onBack={back}
       />
     );
+  const yearMonths = yearMonthsLabel(
+    archiveIssues.filter((issue) => issue.year === year),
+  );
   return (
     <>
       <a className="skip-link" href="#main">
@@ -1808,11 +1812,9 @@ export default function Home() {
               <span className="black-label">Год за годом</span>
               <h2>{year}</h2>
               <p>
-                {year === 2000
-                  ? "Январь–март 2000 года."
-                  : year === 2002
-                    ? "Декабрь 2002 года."
-                    : "Этот год ещё ждёт своих выпусков."}
+                {yearMonths
+                  ? `${yearMonths} ${year} года.`
+                  : "Этот год ещё ждёт своих выпусков."}
               </p>
               <div className="year-total">
                 {archiveIssues.filter((issue) => issue.year === year).length
