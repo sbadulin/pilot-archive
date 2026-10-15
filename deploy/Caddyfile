@@ -3,6 +3,15 @@
 pilot-archive.ru {
     encode zstd gzip
     header Access-Control-Allow-Origin https://pilot-archive.pages.dev
+    # Журнал запросов для подсчёта посетителей (scripts/visitor-report.sh). IP-адреса —
+    # персональные данные, поэтому журнал хранится не дольше 30 дней и не уходит с сервера.
+    log {
+        output file /var/log/caddy/pilot-archive.log {
+            roll_size 50MiB
+            roll_keep_for 720h
+        }
+        format json
+    }
     @root path /
     rewrite @root /index.html
     reverse_proxy https://{$S3_PUBLIC_HOST} {
