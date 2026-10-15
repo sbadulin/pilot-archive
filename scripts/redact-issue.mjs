@@ -179,9 +179,10 @@ function findSpan(words, from, to) {
     throw new Error(`«${from} … ${to}»: between the anchors tesseract has ${span.length} words — column order is mixed up; use "box" items instead`);
   }
   const boxes = lineBoxes(span);
-  // Строка шире 45% полосы — tesseract склеил строки соседних колонок: плашка легла бы поперёк них.
+  // Строка шире 55% полосы — tesseract склеил строки соседних колонок: плашка легла бы поперёк них.
+  // (Одна широкая колонка, например стихи, бывает до половины полосы.)
   const pageWidth = Math.max(...words.map(word => word.right));
-  const wide = boxes.find(box => box.right - box.left > pageWidth * 0.45);
+  const wide = boxes.find(box => box.right - box.left > pageWidth * 0.55);
   if (wide) {
     throw new Error(`«${from} … ${to}»: a line spans ${Math.round(((wide.right - wide.left) * 100) / pageWidth)}% of the page — tesseract merged columns; use "region" items instead`);
   }
