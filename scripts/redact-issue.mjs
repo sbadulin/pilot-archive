@@ -201,6 +201,77 @@ async function countStemInArticle(item) {
   return { expected: count([article.rubric, article.title, article.byline, article.text].join('\n')), checkTitle: false };
 }
 
+// Полоса в оттенках серого при 300 dpi (PGM), для обводки текста по пикселям.
+const grayPages = new Map();
+async function grayPage(sheet) {
+  if (!grayPages.has(sheet)) {
+    const { stdout } = await run('pdftoppm', ['-f', String(sheet), '-l', String(sheet), '-r', String(DPI), '-singlefile', '-gray', pdf], {
+      encoding: 'buffer',
+      maxBuffer: 256 * 1024 * 1024,
+    });
+    const header = stdout.toString('latin1', 0, 64).match(/^P5\s+(\d+)\s+(\d+)\s+255\s/);
+    grayPages.set(sheet, { width: Number(header[1]), height: Number(header[2]), pixels: stdout.subarray(header[0].length) });
+  }
+  return grayPages.get(sheet);
+}
+
+// hug: плашка ступеньками по фактическому краю текста. Для каждой строки пикселей ищется
+// последняя «чернильная» точка слева направо до тёмной заливки соседнего блока (окно, где
+// больше 75% пикселей тёмные: белые буквы на чёрном фоне её не прерывают), края сглаживаются
+// на высоту строки и режутся на полосы по 8 пикселей.
+async function hugBoxes(sheet, area) {
+  const { width, pixels } = await grayPage(sheet);
+  const INK = 110;
+  // Доля тёмного в квадрате вокруг точки: у текста на бумаге она редко выше половины, у
+  // чёрного блока с белыми буквами — почти всегда выше двух третей.
+  const HALF_W = 12;
+  const HALF_H = 10;
+  const w = area.right - area.left + 1;
+  const h = area.bottom - area.top + 1;
+  const sum = new Int32Array((w + 1) * (h + 1));
+  for (let y = 0; y < h; y += 1) {
+    let rowSum = 0;
+    for (let x = 0; x < w; x += 1) {
+      rowSum += pixels[(area.top + y) * width + area.left + x] < INK ? 1 : 0;
+      sum[(y + 1) * (w + 1) + x + 1] = sum[y * (w + 1) + x + 1] + rowSum;
+    }
+  }
+  const density = (x, y) => {
+    const x0 = Math.max(0, x - HALF_W);
+    const x1 = Math.min(w, x + HALF_W + 1);
+    const y0 = Math.max(0, y - HALF_H);
+    const y1 = Math.min(h, y + HALF_H + 1);
+    const dark = sum[y1 * (w + 1) + x1] - sum[y0 * (w + 1) + x1] - sum[y1 * (w + 1) + x0] + sum[y0 * (w + 1) + x0];
+    return dark / ((x1 - x0) * (y1 - y0));
+  };
+  const rows = [];
+  for (let y = 0; y < h; y += 1) {
+    let result = -1;
+    for (let x = 0; x < w; x += 1) {
+      if (density(x, y) > 0.66) {
+        // Начался тёмный блок: текст кончился за полокна до него.
+        break;
+      }
+      if (pixels[(area.top + y) * width + area.left + x] < INK) result = area.left + x;
+    }
+    // Последние HALF_W пикселей перед границей — уже край блока, а не буквы.
+    rows.push(result);
+  }
+  const inked = rows.map(right => right >= area.left);
+  const first = inked.indexOf(true);
+  const last = inked.lastIndexOf(true);
+  if (first < 0) return [];
+  const RADIUS = 16;
+  const smooth = rows.map((_, index) => Math.max(...rows.slice(Math.max(0, index - RADIUS), index + RADIUS + 1)));
+  const boxes = [];
+  for (let y = first; y <= last; y += 8) {
+    const right = Math.max(...smooth.slice(y, y + 8));
+    if (right < area.left) continue;
+    boxes.push({ left: area.left, top: area.top + y, right: right + 6, bottom: area.top + Math.min(y + 8, last + 4) });
+  }
+  return boxes;
+}
+
 async function boxesFor(item) {
   const size = pageSize(item.sheet);
   const fromPercent = ([left, top, right, bottom]) => ({
@@ -210,6 +281,29 @@ async function boxesFor(item) {
     bottom: Math.round((bottom * size.height) / 100),
   });
   if (item.box) return { boxes: [fromPercent(item.box)] };
+  // Примерная область, а плашки — по словам tesseract внутри неё, построчно: ровно по тексту
+  // и не задевая соседнюю колонку, даже если её край скошен.
+  if (item.region) {
+    const area = fromPercent(item.region);
+    const inside = word => {
+      const x = (word.left + word.right) / 2;
+      const y = (word.top + word.bottom) / 2;
+      return x >= area.left && x <= area.right && y >= area.top && y <= area.bottom;
+    };
+    const found = lineBoxes((await readWords(item.sheet)).filter(inside));
+    if (!found.length) throw new Error(`Sheet ${item.sheet}: no tesseract words inside region ${item.region}; use "box"`);
+    // fill: одна плашка на всю ширину области, по высоте — от первой до последней строки.
+    // Для целой заметки в колонке: tesseract часто не дочитывает концы строк.
+    if (item.hug) {
+      const top = Math.min(...found.map(box => box.top)) - 8;
+      const bottom = Math.max(...found.map(box => box.bottom)) + 8;
+      return { boxes: await hugBoxes(item.sheet, { ...area, top, bottom }) };
+    }
+    if (item.fill) {
+      return { boxes: [{ left: area.left, right: area.right, top: Math.min(...found.map(box => box.top)) - 6, bottom: Math.max(...found.map(box => box.bottom)) + 6 }] };
+    }
+    return { boxes: found.map(box => ({ left: box.left - 5, top: box.top - 6, right: box.right + 5, bottom: box.bottom + 6 })) };
+  }
   if (item.article) {
     const sheet = JSON.parse(await readFile(join(dir, `sheet-${pad(item.sheet)}.json`), 'utf8'));
     const article = sheet.result.articles.find(entry => (entry.title ?? '').toLowerCase().includes(item.article.toLowerCase()));
