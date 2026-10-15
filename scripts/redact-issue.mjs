@@ -224,12 +224,12 @@ for (const [index, item] of spec.items.entries()) {
     if (found.length) items.push({ ...item, sheet, number: index + 1, boxes: found.map(pad5), label: false });
   }
 }
-for (const item of items.filter(entry => entry.shortfall)) {
+for (const item of items.filter(entry => entry.shortfall && !entry.keep)) {
   warnings.push(item.shortfall === 'title'
     ? `Лист ${item.sheet}, № ${item.number}: «${item.stem}…» есть в заголовке, а текст материала Claude пересказал — проверьте заголовок глазами, декоративный шрифт tesseract часто не читает.`
     : `Лист ${item.sheet}, № ${item.number}: «${item.stem}…» в тексте встречается ещё ${item.shortfall} раз(а), а tesseract их не нашёл (заголовок, перенос, грязь) — добавьте "box".`);
 }
-for (const item of items.filter(entry => entry.missing)) {
+for (const item of items.filter(entry => entry.missing && !entry.keep)) {
   warnings.push(`Лист ${item.sheet}, № ${item.number}: «${item.find ?? item.word ?? item.stem}» tesseract не нашёл — рамку нужно задать вручную ("box").`);
 }
 for (const warning of warnings) console.warn(warning);

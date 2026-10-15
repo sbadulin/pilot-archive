@@ -67,6 +67,7 @@ async function tesseractText(dir, sheet, box) {
 
 async function findCandidates(dir) {
   const candidates = [];
+  const keyCounts = new Map();
   const sheets = (await readdir(dir)).filter(name => /^sheet-\d+\.json$/.test(name)).sort();
   for (const file of sheets) {
     const sheet = JSON.parse(await readFile(join(dir, file), 'utf8'));
@@ -84,7 +85,12 @@ async function findCandidates(dir) {
       for (const match of matches) {
         if (match.weak) continue;
         const multiword = /\s/.test(match.term);
-        const key = [sheet.sheet, match.category, match.term, inArticle].join('|');
+        // Два материала без заголовка в одной рубрике дают одинаковый ключ: второму добавляем
+        // номер, а у остальных идентификатор не меняется и уже принятые решения находятся.
+        const base = [sheet.sheet, match.category, match.term, inArticle].join('|');
+        const seen = (keyCounts.get(base) ?? 0) + 1;
+        keyCounts.set(base, seen);
+        const key = seen === 1 ? base : `${base}#${seen}`;
         candidates.push({
           id: createHash('sha1').update(key).digest('hex').slice(0, 10),
           sheet: sheet.sheet,
