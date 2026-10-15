@@ -148,10 +148,19 @@ function findPhrase(words, phrase, all = false) {
 
 // Абзац «от… до…»: в длинном тексте tesseract почти всегда где-то ошибается, поэтому
 // ищутся только первые и последние слова, а закрывается всё между ними.
+// Если tesseract перепутал порядок колонок, между якорями оказывается полполосы: такой
+// интервал не закрываем, а просим ручную рамку. Абзацев длиннее 200 слов в газете нет.
+const MAX_SPAN_WORDS = 200;
+
 function findSpan(words, from, to) {
   const start = findPhraseAt(words, from);
   const end = start && findPhraseAt(words, to, start.start);
-  return start && end ? lineBoxes(words.slice(start.start, end.last + 1)) : [];
+  if (!start || !end) return [];
+  const span = words.slice(start.start, end.last + 1);
+  if (span.filter(word => word.word).length > MAX_SPAN_WORDS) {
+    throw new Error(`«${from} … ${to}»: between the anchors tesseract has ${span.length} words — column order is mixed up; use "box" items instead`);
+  }
+  return lineBoxes(span);
 }
 
 // Все слова с этой основой внутри рамки материала (проценты полосы): находка сканера
