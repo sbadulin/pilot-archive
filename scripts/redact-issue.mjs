@@ -46,7 +46,7 @@ const rules = JSON.parse(await readFile(new URL('./redaction-rules.json', import
 // отменяет его: без явного keep фамилия закрывается всегда.
 for (const rule of rules.names) {
   const own = spec.items.find(item => item.name === rule.name);
-  if (own) Object.assign(own, { approved: !own.keep, rule: true, reason: own.reason ?? rule.reason });
+  if (own) Object.assign(own, { approved: !own.keep, rule: true, reason: own.reason ?? rule.reason, exceptIn: own.exceptIn ?? rule.exceptIn });
   else spec.items.push({ ...rule, approved: true, rule: true });
 }
 const pad = page => String(page).padStart(2, '0');
@@ -101,9 +101,22 @@ function findName(words, name) {
   return boxes;
 }
 
-async function countNameInText(sheet, name) {
+// Материалы, где правило по фамилии не действует (exceptIn — регулярное выражение по заголовку
+// и рубрике, например анкета «за кого бы вы проголосовали»).
+async function exemptArticles(sheet, exceptIn) {
+  if (!exceptIn) return [];
   const data = JSON.parse(await readFile(join(dir, `sheet-${pad(sheet)}.json`), 'utf8'));
-  const text = data.result.articles.flatMap(article => [article.rubric, article.title, article.byline, article.text]).filter(Boolean).join('\n');
+  const pattern = new RegExp(exceptIn, 'iu');
+  return data.result.articles.filter(article => article.box && pattern.test(`${article.rubric ?? ''} ${article.title ?? ''}`));
+}
+
+async function countNameInText(sheet, name, exempt) {
+  const data = JSON.parse(await readFile(join(dir, `sheet-${pad(sheet)}.json`), 'utf8'));
+  const text = data.result.articles
+    .filter(article => !exempt.includes(article))
+    .flatMap(article => [article.rubric, article.title, article.byline, article.text])
+    .filter(Boolean)
+    .join('\n');
   return (text.match(new RegExp(`(?<![\\p{L}])${name}`, 'gu')) ?? []).length;
 }
 
@@ -358,8 +371,15 @@ for (const [index, item] of spec.items.entries()) {
     continue;
   }
   for (const sheet of allSheets) {
-    const found = findName(await readWords(sheet), item.name);
-    const expected = await countNameInText(sheet, item.name);
+    const exempt = await exemptArticles(sheet, item.exceptIn);
+    const size = pageSize(sheet);
+    const insideExempt = box => exempt.some(({ box: [left, top, right, bottom] }) => {
+      const x = (((box.left + box.right) / 2) * 100) / size.width;
+      const y = (((box.top + box.bottom) / 2) * 100) / size.height;
+      return x >= left && x <= right && y >= top && y <= bottom;
+    });
+    const found = findName(await readWords(sheet), item.name).filter(box => !insideExempt(box));
+    const expected = await countNameInText(sheet, item.name, exempt);
     if (found.length < expected && !item.checked) warnings.push(`Лист ${sheet}: «${item.name}» в тексте ${expected} раз, tesseract нашёл ${found.length} — проверьте полосу и добавьте "box".`);
     if (found.length) items.push({ ...item, sheet, number: index + 1, boxes: found.map(pad5) });
   }
