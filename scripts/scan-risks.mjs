@@ -53,7 +53,7 @@ for (const dir of issueDirs) {
       const matches = fields.flatMap(([field, value]) => findRisks(value).map(match => ({ ...match, field })));
       if (!matches.length) continue;
       const minor = fields.some(([, value]) => mentionsMinor(value));
-      findings.push({ sheet, article, matches, minor, action: recommendAction(matches, minor) });
+      findings.push({ sheet, article, matches, minor, action: recommendAction(matches, { minor, ad: article.kind === 'ad' }) });
     }
   }
 }
@@ -140,7 +140,7 @@ const html = `<!doctype html>
   td.decision { width: 150px; }
   .action { font-weight: 600; }
   tr.redact .action, tr.redactMinor .action { color: var(--strong); }
-  tr.pointwise .action { color: var(--weak); }
+  tr.pointwise .action, tr.read .action { color: var(--weak); }
   tr.adult .action, tr.review .action { color: var(--muted); }
   ul { margin: 0; padding: 0; list-style: none; }
   li + li { margin-top: 4px; }

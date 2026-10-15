@@ -1,5 +1,6 @@
 // Словарь для поиска материалов, которые по нынешним российским законам могут потребовать
-// изъятия или маркировки. Это фильтр для куратора, а не юридическая оценка: каждое
+// изъятия или маркировки. Категории повторяют список, по которому цензурирует российский
+// онлайн-кинотеатр: он строже закона, но команда решила ему следовать. Это фильтр для куратора, а не юридическая оценка: каждое
 // совпадение смотрит человек. Юриста у команды нет, поэтому спорное закрывается точечно.
 //
 // Термин — это основа слова: совпадение ищется с начала слова (`гомосексуал` найдёт
@@ -15,7 +16,16 @@ export type RiskCategory =
   | "childfree"
   | "extremism"
   | "profanity"
-  | "politics";
+  | "politics"
+  | "sexPractices"
+  | "taboo"
+  | "internet"
+  | "religion"
+  | "explosives"
+  | "alcoholTobacco"
+  | "cruelty"
+  | "childMurder"
+  | "casino";
 
 export const riskCategoryLabels: Record<RiskCategory, string> = {
   lgbt: "ЛГБТ",
@@ -24,8 +34,17 @@ export const riskCategoryLabels: Record<RiskCategory, string> = {
   sexual: "Сексуальный контент",
   childfree: "Чайлдфри и аборты",
   extremism: "Экстремизм, терроризм, нацизм",
-  profanity: "Мат",
+  profanity: "Брань",
   politics: "Политика и полемика",
+  sexPractices: "Секс-практики: БДСМ, оргии",
+  taboo: "Табу: инцест, педофилия, зоофилия",
+  internet: "Западные соцсети и сайты",
+  religion: "Религия",
+  explosives: "Взрывчатка",
+  alcoholTobacco: "Алкоголь и табак",
+  cruelty: "Жестокие сцены",
+  childMurder: "Убийство детей",
+  casino: "Казино и азартные игры",
 };
 
 type TermList = { strong: string[]; weak?: string[] };
@@ -61,9 +80,8 @@ const terms: Record<RiskCategory, TermList> = {
   },
   sexual: {
     strong: [
-      "секс", "эрот", "порн", "оргазм", "мастурб", "онани", "девственн", "презерватив",
-      "проститу", "стриптиз", "минет", "садомазо", "садо-мазо", "извращен", "изнасил",
-      "педофил", "оральн", "анальн", "кончил=", "кончила=", "трахну", "трахал", "трахат",
+      "секс", "эрот", "порн", "оргазм", "девственн", "презерватив", "проститу", "стриптиз",
+      "извращен", "изнасил", "кончил=", "кончила=", "трахну", "трахал", "трахат",
       "переспал", "переспать", "интим",
     ],
     weak: ["голая=", "голые=", "голый=", "обнажен", "любовни", "соблазн", "охмур", "пасси"],
@@ -72,15 +90,16 @@ const terms: Record<RiskCategory, TermList> = {
     strong: ["чайлдфри", "чайлд-фри", "не хочу детей", "не хочу рожать", "аборт", "стерилизаци"],
     weak: ["без детей", "бездетн", "залетел", "залетела", "беременн"],
   },
+  // Сатанизм тоже закрываем: где пропаганда, а где нет, доказать сложно (решение команды).
   extremism: {
     strong: [
       "нацист", "нацизм", "фашист", "фашизм", "свастик", "гитлер", "третий рейх", "третьего рейха",
       "зиг хайль", "скинхед", "скинов=", "скины=", "нбп=", "национал-большевик", "рне=",
       "русское национальное единство", "ауе=", "колумбайн", "скулшут", "басаев", "хаттаб",
       "ичкери", "ваххаб", "шахид", "аль-каид", "талибан", "свидетели иеговы", "свидетелей иеговы",
-      "сатанист", "сатанизм", "джихад",
+      "сатан", "дьяволопоклон", "антихрист", "чернокнижн", "джихад",
     ],
-    weak: ["сатан", "боевик", "теракт", "взрывчат", "бомб", "анархи"],
+    weak: ["боевик", "теракт", "анархи"],
   },
   profanity: {
     strong: [
@@ -89,6 +108,71 @@ const terms: Record<RiskCategory, TermList> = {
       "отъеб", "съеб", "долбоеб", "долбоёб", "бля=", "блять", "бляд",
     ],
     weak: ["сука", "сучк", "мудак", "мудил", "говн", "жоп", "срать", "дерьм"],
+  },
+  // Секс с маркировкой 18+ остаётся, а секс-практики кинотеатр вырезает.
+  sexPractices: {
+    strong: [
+      "садомазо", "садо-мазо", "бдсм", "мазохис", "оргия=", "оргии=", "оргий=", "оргию=", "групповой секс",
+      "групповуха", "групповух", "минет", "оральн", "анальн", "мастурб", "онани",
+      "камасутр",
+    ],
+    // «Свинг» — ещё и джаз.
+    weak: ["садист", "плетк", "наручник", "свингер", "фетиш"],
+  },
+  taboo: {
+    strong: ["инцест", "кровосмеш", "педофил", "зоофил", "скотолож", "растлен", "растлил"],
+  },
+  // Сервисы, признанные в России экстремистскими или заблокированные. В архиве 1996–2007
+  // их почти нет, словарь нужен для поздних выпусков и новых материалов.
+  internet: {
+    strong: [
+      "facebook", "фейсбук", "фэйсбук", "instagram", "инстаграм", "инстаграмм", "twitter", "твиттер",
+      "linkedin", "линкедин", "meta platforms", "whatsapp", "ватсап",
+    ],
+  },
+  // Как и в политике, закон (оскорбление чувств верующих) смотрит на позицию автора.
+  religion: {
+    strong: ["богохуль", "кощунств", "мракобес", "попы=", "попов=", "поповск", "секта=", "секты=", "сектант"],
+    weak: [
+      "церков", "церкв", "храм", "бог=", "бога=", "богу=", "богом=", "иисус", "христ", "библи",
+      "коран", "ислам", "мусульман", "аллах", "священник", "батюшк", "монах", "православ", "иегов",
+      "кришнаит", "буддис",
+    ],
+  },
+  explosives: {
+    strong: [
+      "взрывчат", "тротил", "гексоген", "динамит", "пластит", "детонатор", "коктейль молотова",
+      "самодельное взрывное", "как сделать бомбу",
+    ],
+    weak: ["бомб", "взрыв", "петард", "пиротехник"],
+  },
+  // Запрещена реклама, а не упоминание: в тексте это «посмотреть», в объявлении — закрыть.
+  alcoholTobacco: {
+    strong: [],
+    weak: [
+      "пиво", "пива=", "пиву=", "пивом=", "пивн", "водк", "вино=", "вином=", "коньяк",
+      "шампанск", "алкогол", "спиртн", "пьян", "бухл", "бухать", "бухали", "самогон", "портвейн",
+      "джин-тоник", "сигарет", "курить", "курил", "курени", "закурил", "табак", "табачн", "папирос",
+      "кальян", "мальборо", "marlboro", "winston", "camel", "балтика", "клинское",
+    ],
+  },
+  cruelty: {
+    strong: ["расчлен", "изуверск", "освежевал", "выколол", "выкололи"],
+    weak: ["пытк", "пытал", "зарезал", "зарезали", "избил", "избиени", "изуродова", "труп=", "трупы=", "трупа=", "трупов=", "кровав"],
+  },
+  childMurder: {
+    strong: [
+      "убил ребенка", "убила ребенка", "убили ребенка", "убийство ребенка", "убийство детей",
+      "убил детей", "убила детей", "детоубий", "убила младенца", "убил младенца", "задушила младенца",
+    ],
+  },
+  casino: {
+    strong: [
+      "казино", "рулетк", "игровые автоматы", "игровых автоматов", "игровой автомат", "игровом автомате",
+      "однорукий бандит", "букмекер", "тотализатор", "покер", "блэкджек", "блек-джек", "джекпот",
+      "ставки на спорт",
+    ],
+    weak: ["лотере", "азарт"],
   },
   // Здесь закон смотрит на позицию автора, а не на слова: дискредитация армии, неуважение
   // к власти и символам, призывы к отделению территорий. Словарь только приводит к тексту.
@@ -112,6 +196,9 @@ export type RiskMatch = {
   category: RiskCategory;
   term: string;
   weak: boolean;
+  // Найденные слова целиком, как в тексте («наркомании» для основы «наркот»): по ним
+  // ставится рамка на полосе.
+  word: string;
   // Фрагмент исходного текста вокруг совпадения, для отчёта.
   excerpt: string;
 };
@@ -164,7 +251,16 @@ export function findRisks(text: string): RiskMatch[] {
     const sameCategory = matches.filter(match => match.category === category);
     if (sameCategory.some(match => match.index === found.index)) continue;
     if (weak && sameCategory.some(match => !match.weak)) continue;
-    matches.push({ category, term, weak, index: found.index, excerpt: excerptAround(text, found.index, found[0].length) });
+    const end = found.index + found[0].length;
+    const tail = /^[\p{L}\p{N}-]*/u.exec(text.slice(end))?.[0] ?? "";
+    matches.push({
+      category,
+      term,
+      weak,
+      index: found.index,
+      word: text.slice(found.index, end + tail.length),
+      excerpt: excerptAround(text, found.index, found[0].length),
+    });
   }
   return matches.map(({ index: _index, ...match }) => match);
 }
@@ -184,29 +280,44 @@ export function mentionsMinor(text: string): boolean {
   return minorPatterns.some(pattern => pattern.test(normalized));
 }
 
-export type RiskAction = "redact" | "redactMinor" | "politics" | "pointwise" | "adult" | "review";
+export type RiskAction = "redact" | "redactMinor" | "read" | "pointwise" | "adult" | "review";
 
 // Порядок — от самого срочного к самому мягкому; в этом порядке идёт сводка отчёта.
+// Юриста у команды нет: всё, что не «оставить», закрывается минимальным фрагментом.
 export const riskActionLabels: Record<RiskAction, string> = {
   redact: "Закрыть",
   redactMinor: "Закрыть: несовершеннолетние",
-  politics: "Прочитать: политика",
+  read: "Прочитать: политика, религия",
   pointwise: "Закрыть точечно",
   adult: "Оставить с 18+",
   review: "Посмотреть",
 };
 
 // Запреты на эти темы действуют для любой аудитории, маркировка 18+ их не снимает.
-const alwaysRedacted = new Set<RiskCategory>(["lgbt", "drugs", "suicide", "childfree", "extremism"]);
+const alwaysRedacted = new Set<RiskCategory>(["lgbt", "drugs", "suicide", "childfree", "extremism", "taboo", "childMurder"]);
+// Здесь решает позиция автора, а не слова.
+const readFirst = new Set<RiskCategory>(["politics", "religion"]);
+// По списку кинотеатра: вырезать сам фрагмент, остальной материал оставить.
+const pointwise = new Set<RiskCategory>(["sexPractices", "internet", "explosives", "casino", "cruelty"]);
+// На сайте стоит плашка 18+: мат и традиционный секс остаются (решение команды).
+const adultOnly = new Set<RiskCategory>(["sexual", "profanity"]);
 
-export function recommendAction(matches: RiskMatch[], minor: boolean): RiskAction {
+export type RiskContext = {
+  // Рядом упомянут возраст до 18 лет или школа.
+  minor: boolean;
+  // Материал — реклама или объявление: для алкоголя и табака запрещена именно реклама.
+  ad?: boolean;
+};
+
+export function recommendAction(matches: RiskMatch[], context: RiskContext): RiskAction {
   const strong = matches.filter(match => !match.weak);
   if (strong.some(match => alwaysRedacted.has(match.category))) return "redact";
   const sexualStrong = strong.some(match => match.category === "sexual");
-  if (sexualStrong && minor) return "redactMinor";
-  if (strong.some(match => match.category === "politics")) return "politics";
-  if (strong.some(match => match.category === "profanity")) return "pointwise";
-  if (minor && matches.some(match => match.category === "sexual")) return "pointwise";
-  if (sexualStrong) return "adult";
+  if ((sexualStrong || strong.some(match => match.category === "sexPractices")) && context.minor) return "redactMinor";
+  if (strong.some(match => readFirst.has(match.category))) return "read";
+  if (strong.some(match => pointwise.has(match.category))) return "pointwise";
+  if (context.ad && matches.some(match => match.category === "alcoholTobacco")) return "pointwise";
+  if (context.minor && matches.some(match => match.category === "sexual")) return "pointwise";
+  if (strong.some(match => adultOnly.has(match.category))) return "adult";
   return "review";
 }

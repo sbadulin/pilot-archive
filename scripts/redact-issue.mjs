@@ -1,7 +1,8 @@
 // Закраска фрагментов выпуска по списку решений куратора.
 //
 //   node scripts/redact-issue.mjs "<путь к PDF>"            # review.html с красными рамками
-//   node scripts/redact-issue.mjs "<путь к PDF>" --apply    # PDF с плашками, только approved
+//   node scripts/redact-issue.mjs "<путь к PDF>" --apply    # PDF с плашками, только approved,
+//                                                           # и сравнение «оригинал | цензура»
 //
 // Решения лежат в <кэш выпуска>/redactions.json (кэш — см. ocr-issue.mjs):
 //   { "items": [
@@ -36,6 +37,11 @@ const match = basename(pdf).match(/№\s*(\d+)\s*\((\d+)\)\s*-\s*\d{1,2}\.\d{1,2
 if (!match) throw new Error(`Cannot parse issue from ${basename(pdf)}`);
 const dir = join(cacheRoot, `${match[3]}-${match[1].padStart(2, '0')}-${match[2].padStart(4, '0')}`);
 const spec = JSON.parse(await readFile(join(dir, 'redactions.json'), 'utf8'));
+// Общие правила команды (scripts/redaction-rules.json) действуют на все выпуски: добавленная
+// туда фамилия закроется везде при следующем прогоне.
+const rules = JSON.parse(await readFile(new URL('./redaction-rules.json', import.meta.url), 'utf8'));
+const ownNames = new Set(spec.items.filter(item => item.name).map(item => item.name));
+spec.items.push(...rules.names.filter(rule => !ownNames.has(rule.name)).map(rule => ({ ...rule, approved: true, rule: true })));
 const pad = page => String(page).padStart(2, '0');
 const DPI = 300;
 const INK = '#2b2c27';
@@ -125,6 +131,19 @@ function findPhrase(words, phrase) {
   return [];
 }
 
+// Все слова с этой основой внутри рамки материала (проценты полосы): находка сканера
+// закрывает каждое вхождение термина в материале, а не только первое.
+function findStem(words, stem, whole, within, size) {
+  const target = normalize(stem);
+  const [left, top, right, bottom] = within ?? [0, 0, 100, 100];
+  const inside = word => {
+    const x = (((word.left + word.right) / 2) * 100) / size.width;
+    const y = (((word.top + word.bottom) / 2) * 100) / size.height;
+    return x >= left && x <= right && y >= top && y <= bottom;
+  };
+  return words.filter(word => (whole ? word.word === target : word.word.startsWith(target)) && inside(word));
+}
+
 async function boxesFor(item) {
   const size = pageSize(item.sheet);
   const fromPercent = ([left, top, right, bottom]) => ({
@@ -140,8 +159,14 @@ async function boxesFor(item) {
     if (!article?.box) throw new Error(`Sheet ${item.sheet}: no article titled «${item.article}»`);
     return { boxes: [fromPercent(article.box)], label: true };
   }
-  const found = findPhrase(await readWords(item.sheet), item.find);
-  if (!found.length) throw new Error(`Sheet ${item.sheet}: «${item.find}» not found by tesseract; give a "box" instead`);
+  const found = item.stem
+    ? findStem(await readWords(item.sheet), item.stem, item.whole, item.within, size)
+    : findPhrase(await readWords(item.sheet), item.find);
+  if (!found.length) {
+    // Нерешённую находку сканера показываем без рамки; одобренную без рамки закрасить нельзя.
+    if (!item.approved) return { boxes: [], label: false, missing: true };
+    throw new Error(`Sheet ${item.sheet}: «${item.find ?? item.stem}» not found by tesseract; give a "box" instead`);
+  }
   // Запас, чтобы не остались края букв.
   return { boxes: found.map(box => ({ left: box.left - 5, top: box.top - 6, right: box.right + 5, bottom: box.bottom + 6 })), label: false };
 }
@@ -165,6 +190,9 @@ for (const [index, item] of spec.items.entries()) {
     if (found.length < expected) warnings.push(`Лист ${sheet}: «${item.name}» в тексте ${expected} раз, tesseract нашёл ${found.length} — проверьте полосу и добавьте "box".`);
     if (found.length) items.push({ ...item, sheet, number: index + 1, boxes: found.map(pad5), label: false });
   }
+}
+for (const item of items.filter(entry => entry.missing)) {
+  warnings.push(`Лист ${item.sheet}, № ${item.number}: «${item.find ?? item.word ?? item.stem}» tesseract не нашёл — рамку нужно задать вручную ("box").`);
 }
 for (const warning of warnings) console.warn(warning);
 const sheets = [...new Set(items.map(item => item.sheet))].sort((a, b) => a - b);
@@ -200,7 +228,7 @@ h1{font-size:22px}h2{font-size:17px;margin:32px 0 8px}img{width:100%;border:1px 
 <h1>Закраска на одобрение</h1>
 ${warnings.length ? `<p class="wait">${warnings.map(escape).join('<br>')}</p>` : ''}
 <p>Красная рамка — будет закрашено, серая — рассмотрено и оставлено, оранжевая — ждёт решения. Номер рядом с рамкой — номер в списке.</p>
-${sheets.map(sheet => `<h2>Лист ${sheet}</h2><ol>${items.filter(item => item.sheet === sheet).map(item => `<li value="${item.number}"><span class="${status(item)}">${statusLabels[status(item)]}</span> · ${escape(item.name ? `все упоминания «${item.name}» (${item.boxes.length} на листе)` : item.find ? `слово или фраза «${item.find}»` : item.article ? `материал «${item.article}» целиком` : 'область')}<br><small>${escape(item.reason)}</small></li>`).join('')}</ol><img src="review/sheet-${pad(sheet)}.jpg" alt="Лист ${sheet}">`).join('')}
+${sheets.map(sheet => `<h2>Лист ${sheet}</h2><ol>${items.filter(item => item.sheet === sheet).map(item => `<li value="${item.number}"><span class="${status(item)}">${statusLabels[status(item)]}</span> · ${escape(item.name ? `все упоминания «${item.name}» (${item.boxes.length} на листе)${item.rule ? ', общее правило' : ''}` : item.stem ? `«${item.word}» и все слова на «${item.stem}» в материале (${item.boxes.length})` : item.find ? `слово или фраза «${item.find}»` : item.article ? `материал «${item.article}» целиком` : 'область')}${item.categoryLabel ? ` <small>· ${escape(item.categoryLabel)}</small>` : ''}<br><small>${escape(item.reason ?? (item.excerpt ? `${item.inArticle ? `«${item.inArticle}»: ` : ''}${item.excerpt}` : ''))}</small></li>`).join('')}</ol><img src="review/sheet-${pad(sheet)}.jpg" alt="Лист ${sheet}">`).join('')}
 </body></html>`;
   await writeFile(join(dir, 'review.html'), html);
   console.log(`${items.length} decisions on ${sheets.length} sheets, ${items.filter(item => item.approved).length} approved, ${items.filter(item => item.keep).length} kept. Review: ${join(dir, 'review.html')}`);
@@ -208,7 +236,8 @@ ${sheets.map(sheet => `<h2>Лист ${sheet}</h2><ol>${items.filter(item => item
   const approved = items.filter(item => item.approved);
   const changed = [...new Set(approved.map(item => item.sheet))];
   await run('pdfseparate', [pdf, join(work, 'orig-%03d.pdf')]);
-  for (const sheet of changed) {
+  const comparisons = [];
+  for (const sheet of changed.sort((a, b) => a - b)) {
     const draw = approved
       .filter(item => item.sheet === sheet)
       .flatMap(item => item.boxes.flatMap(box => {
@@ -221,13 +250,25 @@ ${sheets.map(sheet => `<h2>Лист ${sheet}</h2><ol>${items.filter(item => item
         return [...fill, ...label];
       }));
     const redacted = join(work, `redacted-${pad(sheet)}.png`);
-    await run('magick', [await renderPage(sheet, DPI), ...draw, redacted]);
+    const original = await renderPage(sheet, DPI);
+    await run('magick', [original, ...draw, redacted]);
+    // Для проверки: слева оригинал, справа то, что увидит читатель.
+    const comparison = join(work, `compare-${pad(sheet)}.jpg`);
+    await run('magick', [
+      original, redacted, '-resize', '50%', '-bordercolor', 'white', '-border', '20', '+append',
+      '-gravity', 'North', '-background', 'white', '-splice', '0x70', '-font', font, '-pointsize', '34', '-fill', '#1d1b18',
+      '-annotate', '+0+18', `Лист ${sheet}: слева оригинал, справа публичная версия`, '-quality', '80', comparison,
+    ]);
+    comparisons.push(comparison);
     // Новая страница — только картинка с плашками: прежнего изображения полосы в ней нет.
     await run('magick', [redacted, '-units', 'PixelsPerInch', '-density', String(DPI), '-compress', 'jpeg', '-quality', '85', join(work, `orig-${String(sheet).padStart(3, '0')}.pdf`)]);
   }
   const parts = (await readdir(work)).filter(name => /^orig-\d{3}\.pdf$/.test(name)).sort().map(name => join(work, name));
   const output = option('out', join(dir, basename(pdf).replace(/\.pdf$/, ' (публичная версия).pdf')));
   await run('pdfunite', [...parts, output]);
+  const compareOutput = output.replace(/\(публичная версия\)\.pdf$/, '(сравнение).pdf');
+  if (comparisons.length) await run('magick', [...comparisons, compareOutput]);
   console.log(`Redacted ${approved.length} decisions on sheets ${changed.join(', ')}: ${output}`);
+  if (comparisons.length) console.log(`Comparison: ${compareOutput}`);
 }
 await rm(work, { recursive: true, force: true });

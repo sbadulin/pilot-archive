@@ -24,7 +24,8 @@ const pdf = args.find(arg => arg.endsWith('.pdf'));
 if (!pdf) throw new Error('Usage: node scripts/ocr-issue.mjs <issue.pdf> [--pages 6,7] [--jobs 3]');
 const cacheRoot = option('cache', join(homedir(), 'Downloads/pilot-archive-fulltext-cache'));
 const jobs = Number(option('jobs', '3'));
-const tessdata = option('tessdata', process.env.TESSDATA_PREFIX ?? '');
+// Русская модель tesseract (rus.traineddata из tessdata_best) лежит в кэше, системная установка не нужна.
+const tessdata = option('tessdata', process.env.TESSDATA_PREFIX ?? join(cacheRoot, 'tessdata'));
 
 // «ПП №01(0066)-5.01.2000.pdf»
 const match = basename(pdf).match(/№\s*(\d+)\s*\((\d+)\)\s*-\s*(\d{1,2})\.(\d{1,2})\.(\d{4})/);
