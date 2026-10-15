@@ -8,6 +8,8 @@
 //   { "items": [
 //     { "sheet": 6, "find": "садомазо", "reason": "…", "approved": true },      // слово или фраза
 //     { "sheet": 9, "article": "Сатанист или бизнесмен", "approved": false },   // материал целиком
+//     { "sheet": 3, "from": "Поручи этому", "to": "ждать результатов." },     // абзац от и до
+//     { "sheet": 3, "find": "Владимир Владимирович", "all": true },           // каждое вхождение
 //     { "sheet": 2, "box": [10, 20, 40, 30] },                                  // проценты полосы
 //     { "name": "Путин", "approved": true }                                     // фамилия на всех полосах
 //   ] }
@@ -104,10 +106,10 @@ async function countNameInText(sheet, name) {
 // Фраза может начинаться с середины строки и переходить на следующую, в том числе через
 // перенос («садо-» / «мазо»). Тире и одиночные знаки после нормализации пусты: при сравнении
 // они пропускаются, но в рамку попадают, в том числе висящие в конце строки («подонки, –»).
-// Возвращает по прямоугольнику на каждую задетую строку.
-function findPhrase(words, phrase) {
+// Возвращает индексы первого и последнего слова вхождения или null.
+function findPhraseAt(words, phrase, from = 0) {
   const target = phrase.split(/\s+/).map(normalize).filter(Boolean).join(' ');
-  for (let start = 0; start < words.length; start += 1) {
+  for (let start = from; start < words.length; start += 1) {
     if (!words[start].word) continue;
     let text = '';
     for (let end = start; end < words.length && text.length <= target.length; end += 1) {
@@ -118,17 +120,39 @@ function findPhrase(words, phrase) {
       if (!done) continue;
       let last = end;
       while (words[last + 1] && !words[last + 1].word && words[last + 1].line === words[last].line) last += 1;
-      const lines = new Map();
-      for (const item of words.slice(start, last + 1)) {
-        const box = lines.get(item.line);
-        lines.set(item.line, box
-          ? { left: Math.min(box.left, item.left), top: Math.min(box.top, item.top), right: Math.max(box.right, item.right), bottom: Math.max(box.bottom, item.bottom) }
-          : { ...item });
-      }
-      return [...lines.values()];
+      return { start, last };
     }
   }
-  return [];
+  return null;
+}
+
+// По прямоугольнику на каждую задетую строку.
+function lineBoxes(span) {
+  const lines = new Map();
+  for (const item of span) {
+    const box = lines.get(item.line);
+    lines.set(item.line, box
+      ? { left: Math.min(box.left, item.left), top: Math.min(box.top, item.top), right: Math.max(box.right, item.right), bottom: Math.max(box.bottom, item.bottom) }
+      : { ...item });
+  }
+  return [...lines.values()];
+}
+
+// Первое вхождение фразы или, с all, каждое.
+function findPhrase(words, phrase, all = false) {
+  const boxes = [];
+  for (let at = findPhraseAt(words, phrase); at; at = all ? findPhraseAt(words, phrase, at.last + 1) : null) {
+    boxes.push(...lineBoxes(words.slice(at.start, at.last + 1)));
+  }
+  return boxes;
+}
+
+// Абзац «от… до…»: в длинном тексте tesseract почти всегда где-то ошибается, поэтому
+// ищутся только первые и последние слова, а закрывается всё между ними.
+function findSpan(words, from, to) {
+  const start = findPhraseAt(words, from);
+  const end = start && findPhraseAt(words, to, start.start);
+  return start && end ? lineBoxes(words.slice(start.start, end.last + 1)) : [];
 }
 
 // Все слова с этой основой внутри рамки материала (проценты полосы): находка сканера
@@ -192,13 +216,15 @@ async function boxesFor(item) {
     // checked: куратор посмотрел полосу глазами и добавил недостающие рамки вручную.
     shortfall = item.checked ? 0 : checkTitle ? 'title' : Math.max(0, expected - groups.length);
     found = groups.flat();
+  } else if (item.from) {
+    found = findSpan(await readWords(item.sheet), item.from, item.to);
   } else {
-    found = findPhrase(await readWords(item.sheet), item.find);
+    found = findPhrase(await readWords(item.sheet), item.find, item.all);
   }
   if (!found.length) {
     // Нерешённую находку сканера показываем без рамки; одобренную без рамки закрасить нельзя.
     if (!item.approved) return { boxes: [], label: false, missing: true };
-    throw new Error(`Sheet ${item.sheet}: «${item.find ?? item.stem}» not found by tesseract; give a "box" instead`);
+    throw new Error(`Sheet ${item.sheet}: «${item.find ?? item.stem ?? `${item.from} … ${item.to}`}» not found by tesseract; give a "box" instead`);
   }
   // Запас, чтобы не остались края букв.
   return { boxes: found.map(box => ({ left: box.left - 5, top: box.top - 6, right: box.right + 5, bottom: box.bottom + 6 })), label: false, shortfall };
@@ -220,7 +246,7 @@ for (const [index, item] of spec.items.entries()) {
   for (const sheet of allSheets) {
     const found = findName(await readWords(sheet), item.name);
     const expected = await countNameInText(sheet, item.name);
-    if (found.length < expected) warnings.push(`Лист ${sheet}: «${item.name}» в тексте ${expected} раз, tesseract нашёл ${found.length} — проверьте полосу и добавьте "box".`);
+    if (found.length < expected && !item.checked) warnings.push(`Лист ${sheet}: «${item.name}» в тексте ${expected} раз, tesseract нашёл ${found.length} — проверьте полосу и добавьте "box".`);
     if (found.length) items.push({ ...item, sheet, number: index + 1, boxes: found.map(pad5), label: false });
   }
 }
@@ -266,7 +292,7 @@ h1{font-size:22px}h2{font-size:17px;margin:32px 0 8px}img{width:100%;border:1px 
 <h1>Закраска на одобрение</h1>
 ${warnings.length ? `<p class="wait">${warnings.map(escape).join('<br>')}</p>` : ''}
 <p>Красная рамка — будет закрашено, серая — рассмотрено и оставлено, оранжевая — ждёт решения. Номер рядом с рамкой — номер в списке.</p>
-${sheets.map(sheet => `<h2>Лист ${sheet}</h2><ol>${items.filter(item => item.sheet === sheet).map(item => `<li value="${item.number}"><span class="${status(item)}">${statusLabels[status(item)]}</span> · ${escape(item.name ? `все упоминания «${item.name}» (${item.boxes.length} на листе)${item.rule ? ', общее правило' : ''}` : item.stem ? `«${item.word}» и все слова на «${item.stem}» в материале (${item.boxes.length})` : item.find ? `слово или фраза «${item.find}»` : item.article ? `материал «${item.article}» целиком` : 'область')}${item.categoryLabel ? ` <small>· ${escape(item.categoryLabel)}</small>` : ''}<br><small>${escape(item.reason ?? (item.excerpt ? `${item.inArticle ? `«${item.inArticle}»: ` : ''}${item.excerpt}` : ''))}</small></li>`).join('')}</ol><img src="review/sheet-${pad(sheet)}.jpg" alt="Лист ${sheet}">`).join('')}
+${sheets.map(sheet => `<h2>Лист ${sheet}</h2><ol>${items.filter(item => item.sheet === sheet).map(item => `<li value="${item.number}"><span class="${status(item)}">${statusLabels[status(item)]}</span> · ${escape(item.name ? `все упоминания «${item.name}» (${item.boxes.length} на листе)${item.rule ? ', общее правило' : ''}` : item.stem ? `«${item.word}» и все слова на «${item.stem}» в материале (${item.boxes.length})` : item.from ? `от «${item.from}» до «${item.to}»` : item.find ? `${item.all ? 'все вхождения' : 'слово или фраза'} «${item.find}»` : item.article ? `материал «${item.article}» целиком` : 'область')}${item.categoryLabel ? ` <small>· ${escape(item.categoryLabel)}</small>` : ''}<br><small>${escape(item.reason ?? (item.excerpt ? `${item.inArticle ? `«${item.inArticle}»: ` : ''}${item.excerpt}` : ''))}</small></li>`).join('')}</ol><img src="review/sheet-${pad(sheet)}.jpg" alt="Лист ${sheet}">`).join('')}
 </body></html>`;
   await writeFile(join(dir, 'review.html'), html);
   console.log(`${items.length} decisions on ${sheets.length} sheets, ${items.filter(item => item.approved).length} approved, ${items.filter(item => item.keep).length} kept. Review: ${join(dir, 'review.html')}`);
