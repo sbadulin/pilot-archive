@@ -372,6 +372,9 @@ for (const [index, item] of spec.items.entries()) {
     continue;
   }
   for (const sheet of allSheets) {
+    // Телепрограмма — список передач, в ней ничего не закрываем (решение команды).
+    const sheetData = JSON.parse(await readFile(join(dir, `sheet-${pad(sheet)}.json`), 'utf8'));
+    if (sheetData.result?.pageType === 'tv') continue;
     const exempt = await exemptArticles(sheet, item.exceptIn);
     const size = pageSize(sheet);
     const insideExempt = box => exempt.some(({ box: [left, top, right, bottom] }) => {
