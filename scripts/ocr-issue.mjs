@@ -61,9 +61,60 @@ function parseJson(text) {
   return JSON.parse(body.slice(body.indexOf('{'), body.lastIndexOf('}') + 1));
 }
 
+// Плотную полосу (пейджер целиком) Claude иногда отказывается переписывать — «слишком длинный
+// фрагмент», а на ужатой картинке мелкий шрифт не читается. Тогда режем полосу на вертикальные
+// полосы с нахлёстом при 300 dpi и читаем по кускам, пересчитывая рамки в проценты полосы.
+const STRIPS = 3;
+const OVERLAP = 0.04;
+
+async function readTextInStrips(page) {
+  const full = join(dir, `page-${pad(page)}-strips.png`);
+  await render(page, 300, full);
+  const { stdout: size } = await run('magick', ['identify', '-format', '%w %h', full]);
+  const [width, height] = size.split(' ').map(Number);
+  const articles = [];
+  let pageType = 'regular';
+  for (let index = 0; index < STRIPS; index += 1) {
+    const left = Math.max(0, index / STRIPS - OVERLAP);
+    const right = Math.min(1, (index + 1) / STRIPS + OVERLAP);
+    const strip = join(dir, `page-${pad(page)}-strip${index + 1}.jpg`);
+    await run('magick', [full, '-crop', `${Math.round((right - left) * width)}x${height}+${Math.round(left * width)}+0`, '+repage', '-quality', '88', strip]);
+    const note = `\n\nЭто вертикальная полоса ${index + 1} из ${STRIPS} одной газетной полосы (от ${Math.round(left * 100)}% до ${Math.round(right * 100)}% ширины), полное разрешение. Перепиши только материалы, которые целиком или в основном находятся в этой полосе; материалы, обрезанные краем, пропусти — их перепишут из соседней полосы. Рамки box указывай в процентах ЭТОЙ полосы.`;
+    const { stdout } = await run('claude', ['-p', prompt.replace('{{IMAGE}}', strip) + note, '--allowedTools', 'Read', '--output-format', 'json'], { maxBuffer: 64 * 1024 * 1024, timeout: 15 * 60 * 1000 });
+    const response = JSON.parse(stdout);
+    if (response.is_error) throw new Error(response.result);
+    const result = parseJson(response.result);
+    if (result.pageType && result.pageType !== 'regular') pageType = result.pageType;
+    for (const article of result.articles ?? []) {
+      if (Array.isArray(article.box)) {
+        const [l, t, r, b] = article.box;
+        article.box = [left * 100 + (l * (right - left)), t, left * 100 + (r * (right - left)), b].map(v => Math.round(v * 10) / 10);
+      }
+      // Нахлёст: один материал мог попасть в две полосы — оставляем первое вхождение.
+      const key = (article.text ?? '').slice(0, 80);
+      if (!articles.some(other => (other.text ?? '').slice(0, 80) === key)) articles.push(article);
+    }
+    await rm(strip);
+  }
+  await rm(full);
+  return { pageType, articles };
+}
+
 async function readText(page) {
   const out = join(dir, `sheet-${pad(page)}.json`);
   if (await exists(out)) return 'cached';
+  if (await exists(join(dir, `failed-${pad(page)}.txt`))) {
+    // Целиком уже не получилось — пробуем по полосам.
+    const started = Date.now();
+    try {
+      const result = await readTextInStrips(page);
+      await writeFile(out, JSON.stringify({ ...issue, sheet: page, printedPage: null, model: 'claude-code-strips', durationMs: Date.now() - started, status: 'ok', result }, null, 2));
+      await rm(join(dir, `failed-${pad(page)}.txt`));
+      return 'ok (strips)';
+    } catch (error) {
+      return `failed in strips: ${error.message}`;
+    }
+  }
   const image = join(dir, `page-${pad(page)}.jpg`);
   await render(page, 200, image);
   const started = Date.now();
