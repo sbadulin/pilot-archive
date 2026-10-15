@@ -113,7 +113,8 @@ async function exemptArticles(sheet, exceptIn) {
 async function countNameInText(sheet, name, exempt) {
   const data = JSON.parse(await readFile(join(dir, `sheet-${pad(sheet)}.json`), 'utf8'));
   const text = data.result.articles
-    .filter(article => !exempt.includes(article))
+    // Сравниваем по содержимому: exemptArticles читает файл отдельно, объекты разные.
+    .filter(article => !exempt.some(other => other.text === article.text && other.title === article.title))
     .flatMap(article => [article.rubric, article.title, article.byline, article.text])
     .filter(Boolean)
     .join('\n');
