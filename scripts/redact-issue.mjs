@@ -165,7 +165,14 @@ function findSpan(words, from, to) {
   if (span.filter(word => word.word).length > MAX_SPAN_WORDS) {
     throw new Error(`«${from} … ${to}»: between the anchors tesseract has ${span.length} words — column order is mixed up; use "box" items instead`);
   }
-  return lineBoxes(span);
+  const boxes = lineBoxes(span);
+  // Строка шире 45% полосы — tesseract склеил строки соседних колонок: плашка легла бы поперёк них.
+  const pageWidth = Math.max(...words.map(word => word.right));
+  const wide = boxes.find(box => box.right - box.left > pageWidth * 0.45);
+  if (wide) {
+    throw new Error(`«${from} … ${to}»: a line spans ${Math.round(((wide.right - wide.left) * 100) / pageWidth)}% of the page — tesseract merged columns; use "region" items instead`);
+  }
+  return boxes;
 }
 
 // Все слова с этой основой внутри рамки материала (проценты полосы): находка сканера
