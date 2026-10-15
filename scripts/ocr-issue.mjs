@@ -22,7 +22,7 @@ const option = (name, fallback) => {
 };
 const pdf = args.find(arg => arg.endsWith('.pdf'));
 if (!pdf) throw new Error('Usage: node scripts/ocr-issue.mjs <issue.pdf> [--pages 6,7] [--jobs 3]');
-const cacheRoot = option('cache', join(homedir(), 'Downloads/pilot-archive-fulltext-cache'));
+const cacheRoot = option('cache', join(process.env.PILOT_ARCHIVE_ROOT ?? join(homedir(), 'Downloads/Reading'), 'pilot-archive-fulltext-cache'));
 const jobs = Number(option('jobs', '3'));
 // Русская модель tesseract (rus.traineddata из tessdata_best) лежит в кэше, системная установка не нужна.
 const tessdata = option('tessdata', process.env.TESSDATA_PREFIX ?? join(cacheRoot, 'tessdata'));

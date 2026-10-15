@@ -27,7 +27,7 @@ const option = (name, fallback) => {
   return index >= 0 && args[index + 1] ? args[index + 1] : fallback;
 };
 const apply = args.includes('--apply');
-const cacheRoot = option('cache', join(homedir(), 'Downloads/pilot-archive-fulltext-cache'));
+const cacheRoot = option('cache', join(process.env.PILOT_ARCHIVE_ROOT ?? join(homedir(), 'Downloads/Reading'), 'pilot-archive-fulltext-cache'));
 const exists = path => access(path).then(() => true, () => false);
 const pad = page => String(page).padStart(2, '0');
 // Находки, по которым нужно решение. «Оставить с 18+» и «Посмотреть» остаются только в отчёте сканера.

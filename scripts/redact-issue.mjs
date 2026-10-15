@@ -32,7 +32,7 @@ const option = (name, fallback) => {
 const pdf = args.find(arg => arg.endsWith('.pdf'));
 if (!pdf) throw new Error('Usage: node scripts/redact-issue.mjs <issue.pdf> [--apply]');
 const apply = args.includes('--apply');
-const cacheRoot = option('cache', join(homedir(), 'Downloads/pilot-archive-fulltext-cache'));
+const cacheRoot = option('cache', join(process.env.PILOT_ARCHIVE_ROOT ?? join(homedir(), 'Downloads/Reading'), 'pilot-archive-fulltext-cache'));
 const match = basename(pdf).match(/№\s*(\d+)\s*\((\d+)\)\s*-\s*\d{1,2}\.\d{1,2}\.(\d{4})/);
 if (!match) throw new Error(`Cannot parse issue from ${basename(pdf)}`);
 const dir = join(cacheRoot, `${match[3]}-${match[1].padStart(2, '0')}-${match[2].padStart(4, '0')}`);
@@ -141,7 +141,32 @@ function findStem(words, stem, whole, within, size) {
     const y = (((word.top + word.bottom) / 2) * 100) / size.height;
     return x >= left && x <= right && y >= top && y <= bottom;
   };
-  return words.filter(word => (whole ? word.word === target : word.word.startsWith(target)) && inside(word));
+  const matches = text => (whole ? text === target : text.startsWith(target));
+  const found = [];
+  for (const [index, word] of words.entries()) {
+    if (!inside(word)) continue;
+    if (matches(word.word)) found.push([word]);
+    // Перенос между строками: «са-» / «таниста».
+    else if (word.word.endsWith('-') && words[index + 1] && matches(word.word.slice(0, -1) + words[index + 1].word)) {
+      found.push([word, words[index + 1]]);
+    }
+  }
+  return found;
+}
+
+// Сколько раз основа встречается в тексте материала от Claude: если tesseract нашёл меньше
+// (декоративный шрифт заголовка, грязная печать), куратор получит предупреждение.
+async function countStemInArticle(item) {
+  const data = JSON.parse(await readFile(join(dir, `sheet-${pad(item.sheet)}.json`), 'utf8'));
+  const article = data.result.articles.find(entry => (entry.title ?? entry.rubric) === item.inArticle);
+  if (!article) return { expected: 0, checkTitle: false };
+  const retold = /^\s*\[|\[(?:краткое|текст|пересказ)/i.test(article.text ?? '');
+  const stem = normalize(item.stem);
+  const pattern = new RegExp(`(?<![\\p{L}\\p{N}-])${stem}${item.whole ? '(?![\\p{L}\\p{N}])' : ''}`, 'gu');
+  const count = text => (String(text ?? '').toLowerCase().replace(/ё/g, 'е').match(pattern) ?? []).length;
+  // У пересказанного материала сравнивать не с чем, кроме заголовка: его просим проверить глазами.
+  if (retold) return { expected: 0, checkTitle: count([article.rubric, article.title].join(' ')) > 0 };
+  return { expected: count([article.rubric, article.title, article.byline, article.text].join('\n')), checkTitle: false };
 }
 
 async function boxesFor(item) {
@@ -159,16 +184,24 @@ async function boxesFor(item) {
     if (!article?.box) throw new Error(`Sheet ${item.sheet}: no article titled «${item.article}»`);
     return { boxes: [fromPercent(article.box)], label: true };
   }
-  const found = item.stem
-    ? findStem(await readWords(item.sheet), item.stem, item.whole, item.within, size)
-    : findPhrase(await readWords(item.sheet), item.find);
+  let shortfall = 0;
+  let found;
+  if (item.stem) {
+    const groups = findStem(await readWords(item.sheet), item.stem, item.whole, item.within, size);
+    const { expected, checkTitle } = await countStemInArticle(item);
+    // checked: куратор посмотрел полосу глазами и добавил недостающие рамки вручную.
+    shortfall = item.checked ? 0 : checkTitle ? 'title' : Math.max(0, expected - groups.length);
+    found = groups.flat();
+  } else {
+    found = findPhrase(await readWords(item.sheet), item.find);
+  }
   if (!found.length) {
     // Нерешённую находку сканера показываем без рамки; одобренную без рамки закрасить нельзя.
     if (!item.approved) return { boxes: [], label: false, missing: true };
     throw new Error(`Sheet ${item.sheet}: «${item.find ?? item.stem}» not found by tesseract; give a "box" instead`);
   }
   // Запас, чтобы не остались края букв.
-  return { boxes: found.map(box => ({ left: box.left - 5, top: box.top - 6, right: box.right + 5, bottom: box.bottom + 6 })), label: false };
+  return { boxes: found.map(box => ({ left: box.left - 5, top: box.top - 6, right: box.right + 5, bottom: box.bottom + 6 })), label: false, shortfall };
 }
 
 // Статус решения: approved — закрасить; keep — рассмотрено и оставлено; иначе ждёт решения.
@@ -190,6 +223,11 @@ for (const [index, item] of spec.items.entries()) {
     if (found.length < expected) warnings.push(`Лист ${sheet}: «${item.name}» в тексте ${expected} раз, tesseract нашёл ${found.length} — проверьте полосу и добавьте "box".`);
     if (found.length) items.push({ ...item, sheet, number: index + 1, boxes: found.map(pad5), label: false });
   }
+}
+for (const item of items.filter(entry => entry.shortfall)) {
+  warnings.push(item.shortfall === 'title'
+    ? `Лист ${item.sheet}, № ${item.number}: «${item.stem}…» есть в заголовке, а текст материала Claude пересказал — проверьте заголовок глазами, декоративный шрифт tesseract часто не читает.`
+    : `Лист ${item.sheet}, № ${item.number}: «${item.stem}…» в тексте встречается ещё ${item.shortfall} раз(а), а tesseract их не нашёл (заголовок, перенос, грязь) — добавьте "box".`);
 }
 for (const item of items.filter(entry => entry.missing)) {
   warnings.push(`Лист ${item.sheet}, № ${item.number}: «${item.find ?? item.word ?? item.stem}» tesseract не нашёл — рамку нужно задать вручную ("box").`);

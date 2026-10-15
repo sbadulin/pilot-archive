@@ -17,7 +17,7 @@ const option = (name, fallback) => {
   const index = args.indexOf(`--${name}`);
   return index >= 0 && args[index + 1] ? args[index + 1] : fallback;
 };
-const cacheDir = option('cache', join(homedir(), 'Downloads/pilot-archive-authors-cache'));
+const cacheDir = option('cache', join(process.env.PILOT_ARCHIVE_ROOT ?? join(homedir(), 'Downloads/Reading'), 'pilot-archive-authors-cache'));
 const output = option('out', 'risk-report.html');
 const siteUrl = option('site', 'https://pilot-archive.ru').replace(/\/$/, '');
 
