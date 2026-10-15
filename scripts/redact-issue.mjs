@@ -42,8 +42,13 @@ const spec = JSON.parse(await readFile(join(dir, 'redactions.json'), 'utf8'));
 // Общие правила команды (scripts/redaction-rules.json) действуют на все выпуски: добавленная
 // туда фамилия закроется везде при следующем прогоне.
 const rules = JSON.parse(await readFile(new URL('./redaction-rules.json', import.meta.url), 'utf8'));
-const ownNames = new Set(spec.items.filter(item => item.name).map(item => item.name));
-spec.items.push(...rules.names.filter(rule => !ownNames.has(rule.name)).map(rule => ({ ...rule, approved: true, rule: true })));
+// Своё решение выпуска по той же фамилии дополняет общее правило (например, checked), но не
+// отменяет его: без явного keep фамилия закрывается всегда.
+for (const rule of rules.names) {
+  const own = spec.items.find(item => item.name === rule.name);
+  if (own) Object.assign(own, { approved: !own.keep, rule: true, reason: own.reason ?? rule.reason });
+  else spec.items.push({ ...rule, approved: true, rule: true });
+}
 const pad = page => String(page).padStart(2, '0');
 const DPI = 300;
 const INK = '#2b2c27';
