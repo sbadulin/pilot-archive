@@ -47,7 +47,6 @@ spec.items.push(...rules.names.filter(rule => !ownNames.has(rule.name)).map(rule
 const pad = page => String(page).padStart(2, '0');
 const DPI = 300;
 const INK = '#2b2c27';
-const PAPER = '#f5f4ee';
 const font = option('font', '/System/Library/Fonts/Supplemental/PTSans.ttc');
 
 const { stdout: info } = await run('pdfinfo', ['-f', '1', '-l', '999', pdf]);
@@ -201,12 +200,12 @@ async function boxesFor(item) {
     right: Math.round((right * size.width) / 100),
     bottom: Math.round((bottom * size.height) / 100),
   });
-  if (item.box) return { boxes: [fromPercent(item.box)], label: true };
+  if (item.box) return { boxes: [fromPercent(item.box)] };
   if (item.article) {
     const sheet = JSON.parse(await readFile(join(dir, `sheet-${pad(item.sheet)}.json`), 'utf8'));
     const article = sheet.result.articles.find(entry => (entry.title ?? '').toLowerCase().includes(item.article.toLowerCase()));
     if (!article?.box) throw new Error(`Sheet ${item.sheet}: no article titled «${item.article}»`);
-    return { boxes: [fromPercent(article.box)], label: true };
+    return { boxes: [fromPercent(article.box)] };
   }
   let shortfall = 0;
   let found;
@@ -223,11 +222,11 @@ async function boxesFor(item) {
   }
   if (!found.length) {
     // Нерешённую находку сканера показываем без рамки; одобренную без рамки закрасить нельзя.
-    if (!item.approved) return { boxes: [], label: false, missing: true };
+    if (!item.approved) return { boxes: [], missing: true };
     throw new Error(`Sheet ${item.sheet}: «${item.find ?? item.stem ?? `${item.from} … ${item.to}`}» not found by tesseract; give a "box" instead`);
   }
   // Запас, чтобы не остались края букв.
-  return { boxes: found.map(box => ({ left: box.left - 5, top: box.top - 6, right: box.right + 5, bottom: box.bottom + 6 })), label: false, shortfall };
+  return { boxes: found.map(box => ({ left: box.left - 5, top: box.top - 6, right: box.right + 5, bottom: box.bottom + 6 })), shortfall };
 }
 
 // Статус решения: approved — закрасить; keep — рассмотрено и оставлено; иначе ждёт решения.
@@ -247,7 +246,7 @@ for (const [index, item] of spec.items.entries()) {
     const found = findName(await readWords(sheet), item.name);
     const expected = await countNameInText(sheet, item.name);
     if (found.length < expected && !item.checked) warnings.push(`Лист ${sheet}: «${item.name}» в тексте ${expected} раз, tesseract нашёл ${found.length} — проверьте полосу и добавьте "box".`);
-    if (found.length) items.push({ ...item, sheet, number: index + 1, boxes: found.map(pad5), label: false });
+    if (found.length) items.push({ ...item, sheet, number: index + 1, boxes: found.map(pad5) });
   }
 }
 for (const item of items.filter(entry => entry.shortfall && !entry.keep)) {
@@ -304,15 +303,8 @@ ${sheets.map(sheet => `<h2>Лист ${sheet}</h2><ol>${items.filter(item => item
   for (const sheet of changed.sort((a, b) => a - b)) {
     const draw = approved
       .filter(item => item.sheet === sheet)
-      .flatMap(item => item.boxes.flatMap(box => {
-        const fill = ['-fill', INK, '-draw', `rectangle ${box.left},${box.top} ${box.right},${box.bottom}`];
-        const roomy = item.label && box.bottom - box.top > 160 && box.right - box.left > 600;
-        const label = roomy
-          ? ['-fill', PAPER, '-font', font, '-pointsize', '64', '-gravity', 'NorthWest',
-             '-annotate', `+${Math.round((box.left + box.right) / 2 - 290)}+${Math.round((box.top + box.bottom) / 2 - 36)}`, 'Фрагмент недоступен']
-          : [];
-        return [...fill, ...label];
-      }));
+      // Только чёрная плашка, без надписи: она ничего не добавляет читателю (решение команды).
+      .flatMap(item => item.boxes.flatMap(box => ['-fill', INK, '-draw', `rectangle ${box.left},${box.top} ${box.right},${box.bottom}`]));
     const redacted = join(work, `redacted-${pad(sheet)}.png`);
     const original = await renderPage(sheet, DPI);
     await run('magick', [original, ...draw, redacted]);
