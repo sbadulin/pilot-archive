@@ -1,0 +1,470 @@
+// Закраска фрагментов выпуска по списку решений куратора.
+//
+//   node scripts/redact-issue.mjs "<путь к PDF>"            # review.html с красными рамками
+//   node scripts/redact-issue.mjs "<путь к PDF>" --apply    # PDF с плашками, только approved,
+//                                                           # и сравнение «оригинал | цензура»
+//
+// Решения лежат в <кэш выпуска>/redactions.json (кэш — см. ocr-issue.mjs):
+//   { "items": [
+//     { "sheet": 6, "find": "садомазо", "reason": "…", "approved": true },      // слово или фраза
+//     { "sheet": 9, "article": "Сатанист или бизнесмен", "approved": false },   // материал целиком
+//     { "sheet": 3, "from": "Поручи этому", "to": "ждать результатов." },     // абзац от и до
+//     { "sheet": 3, "find": "Владимир Владимирович", "all": true },           // каждое вхождение
+//     { "sheet": 2, "box": [10, 20, 40, 30] },                                  // проценты полосы
+//     { "name": "Путин", "approved": true }                                     // фамилия на всех полосах
+//   ] }
+// Фамилия ищется только с заглавной буквы («путина» — ещё и ход лосося) и закрывается вместе
+// с именем или инициалами рядом. Число найденных упоминаний сверяется с текстом Claude:
+// если tesseract какое-то не прочитал, скрипт об этом предупредит.
+// Слова ищутся в words-NN.tsv (tesseract, 300 dpi), рамка материала — в sheet-NN.json.
+// Закраска делается в пикселях полосы, а не поверх неё: исходного изображения в новом
+// PDF нет. Исходный PDF не меняется; результат пишется рядом с кэшем.
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
+
+const run = promisify(execFile);
+const args = process.argv.slice(2);
+const option = (name, fallback) => {
+  const index = args.indexOf(`--${name}`);
+  return index >= 0 && args[index + 1] ? args[index + 1] : fallback;
+};
+const pdf = args.find(arg => arg.endsWith('.pdf'));
+if (!pdf) throw new Error('Usage: node scripts/redact-issue.mjs <issue.pdf> [--apply]');
+const apply = args.includes('--apply');
+const cacheRoot = option('cache', join(process.env.PILOT_ARCHIVE_ROOT ?? join(homedir(), 'Downloads/Reading'), 'pilot-archive-fulltext-cache'));
+const match = basename(pdf).match(/№\s*(\d+)\s*\((\d+)\)\s*-\s*\d{1,2}\.\d{1,2}\.(\d{4})/);
+if (!match) throw new Error(`Cannot parse issue from ${basename(pdf)}`);
+const dir = join(cacheRoot, `${match[3]}-${match[1].padStart(2, '0')}-${match[2].padStart(4, '0')}`);
+const spec = JSON.parse(await readFile(join(dir, 'redactions.json'), 'utf8'));
+// Общие правила команды (scripts/redaction-rules.json) действуют на все выпуски: добавленная
+// туда фамилия закроется везде при следующем прогоне.
+const rules = JSON.parse(await readFile(new URL('./redaction-rules.json', import.meta.url), 'utf8'));
+// Своё решение выпуска по той же фамилии дополняет общее правило (например, checked), но не
+// отменяет его: без явного keep фамилия закрывается всегда.
+for (const rule of rules.names) {
+  const own = spec.items.find(item => item.name === rule.name);
+  if (own) Object.assign(own, { approved: !own.keep, rule: true, reason: own.reason ?? rule.reason, exceptIn: own.exceptIn ?? rule.exceptIn });
+  else spec.items.push({ ...rule, approved: true, rule: true });
+}
+const pad = page => String(page).padStart(2, '0');
+const DPI = 300;
+const INK = '#2b2c27';
+const font = option('font', '/System/Library/Fonts/Supplemental/PTSans.ttc');
+
+const { stdout: info } = await run('pdfinfo', ['-f', '1', '-l', '999', pdf]);
+const pageSize = page => {
+  const found = info.match(new RegExp(`^Page\\s+${page} size:\\s+([\\d.]+) x ([\\d.]+)`, 'm'));
+  return { width: Math.round((Number(found[1]) * DPI) / 72), height: Math.round((Number(found[2]) * DPI) / 72) };
+};
+
+const normalize = word => word.toLowerCase().replace(/ё/g, 'е').replace(/[^\p{L}\p{N}-]/gu, '');
+
+async function readWords(sheet) {
+  const tsv = await readFile(join(dir, `words-${pad(sheet)}.tsv`), 'utf8');
+  return tsv
+    .split('\n')
+    .slice(1)
+    .map(line => line.split('\t'))
+    .filter(cols => cols[0] === '5' && cols[11]?.trim())
+    .map(cols => ({
+      line: cols.slice(2, 5).join('.'),
+      left: Number(cols[6]),
+      top: Number(cols[7]),
+      right: Number(cols[6]) + Number(cols[8]),
+      bottom: Number(cols[7]) + Number(cols[9]),
+      word: normalize(cols[11]),
+      raw: cols[11].replace(/^[^\p{L}\p{N}]+/u, ''),
+    }));
+}
+
+// Упоминания фамилии на полосе: «Путин», «Путина», «В. В. Путина», «Владимир Путин», «Путин В. В.».
+function findName(words, name) {
+  const isInitial = word => word === 'в' || word === 'вв';
+  const boxes = [];
+  for (const [index, item] of words.entries()) {
+    if (!item.raw.startsWith(name)) continue;
+    let first = index;
+    let last = index;
+    while (first > index - 2 && words[first - 1]?.line === item.line && (isInitial(words[first - 1].word) || words[first - 1].word.startsWith('владимир'))) first -= 1;
+    while (last < index + 2 && words[last + 1]?.line === item.line && (isInitial(words[last + 1].word) || words[last + 1].word.startsWith('владимирович'))) last += 1;
+    const span = words.slice(first, last + 1);
+    boxes.push({
+      left: Math.min(...span.map(word => word.left)),
+      top: Math.min(...span.map(word => word.top)),
+      right: Math.max(...span.map(word => word.right)),
+      bottom: Math.max(...span.map(word => word.bottom)),
+    });
+  }
+  return boxes;
+}
+
+// Материалы, где правило по фамилии не действует (exceptIn — регулярное выражение по заголовку
+// и рубрике, например анкета «за кого бы вы проголосовали»).
+async function exemptArticles(sheet, exceptIn) {
+  if (!exceptIn) return [];
+  const data = JSON.parse(await readFile(join(dir, `sheet-${pad(sheet)}.json`), 'utf8'));
+  const pattern = new RegExp(exceptIn, 'iu');
+  return data.result.articles.filter(article => article.box && pattern.test(`${article.rubric ?? ''} ${article.title ?? ''}`));
+}
+
+async function countNameInText(sheet, name, exempt) {
+  const data = JSON.parse(await readFile(join(dir, `sheet-${pad(sheet)}.json`), 'utf8'));
+  const text = data.result.articles
+    // Сравниваем по содержимому: exemptArticles читает файл отдельно, объекты разные.
+    .filter(article => !exempt.some(other => other.text === article.text && other.title === article.title))
+    .flatMap(article => [article.rubric, article.title, article.byline, article.text])
+    .filter(Boolean)
+    .join('\n');
+  return (text.match(new RegExp(`(?<![\\p{L}])${name}`, 'gu')) ?? []).length;
+}
+
+// Фраза может начинаться с середины строки и переходить на следующую, в том числе через
+// перенос («садо-» / «мазо»). Тире и одиночные знаки после нормализации пусты: при сравнении
+// они пропускаются, но в рамку попадают, в том числе висящие в конце строки («подонки, –»).
+// Возвращает индексы первого и последнего слова вхождения или null.
+function findPhraseAt(words, phrase, from = 0) {
+  const target = phrase.split(/\s+/).map(normalize).filter(Boolean).join(' ');
+  for (let start = from; start < words.length; start += 1) {
+    if (!words[start].word) continue;
+    let text = '';
+    for (let end = start; end < words.length && text.length <= target.length; end += 1) {
+      const word = words[end].word;
+      if (!word) continue;
+      text = text.endsWith('-') ? text.slice(0, -1) + word : text ? `${text} ${word}` : word;
+      const done = text === target || (text.startsWith(target) && end === start);
+      if (!done) continue;
+      let last = end;
+      while (words[last + 1] && !words[last + 1].word && words[last + 1].line === words[last].line) last += 1;
+      return { start, last };
+    }
+  }
+  return null;
+}
+
+// По прямоугольнику на каждую задетую строку.
+function lineBoxes(span) {
+  const lines = new Map();
+  for (const item of span) {
+    const box = lines.get(item.line);
+    lines.set(item.line, box
+      ? { left: Math.min(box.left, item.left), top: Math.min(box.top, item.top), right: Math.max(box.right, item.right), bottom: Math.max(box.bottom, item.bottom) }
+      : { ...item });
+  }
+  return [...lines.values()];
+}
+
+// Первое вхождение фразы или, с all, каждое.
+function findPhrase(words, phrase, all = false) {
+  const boxes = [];
+  for (let at = findPhraseAt(words, phrase); at; at = all ? findPhraseAt(words, phrase, at.last + 1) : null) {
+    boxes.push(...lineBoxes(words.slice(at.start, at.last + 1)));
+  }
+  return boxes;
+}
+
+// Абзац «от… до…»: в длинном тексте tesseract почти всегда где-то ошибается, поэтому
+// ищутся только первые и последние слова, а закрывается всё между ними.
+// Если tesseract перепутал порядок колонок, между якорями оказывается полполосы: такой
+// интервал не закрываем, а просим ручную рамку. Абзацев длиннее 200 слов в газете нет.
+const MAX_SPAN_WORDS = 200;
+
+function findSpan(words, from, to) {
+  const start = findPhraseAt(words, from);
+  const end = start && findPhraseAt(words, to, start.start);
+  if (!start || !end) return [];
+  const span = words.slice(start.start, end.last + 1);
+  if (span.filter(word => word.word).length > MAX_SPAN_WORDS) {
+    throw new Error(`«${from} … ${to}»: between the anchors tesseract has ${span.length} words — column order is mixed up; use "box" items instead`);
+  }
+  const boxes = lineBoxes(span);
+  // Строка шире 55% полосы — tesseract склеил строки соседних колонок: плашка легла бы поперёк них.
+  // (Одна широкая колонка, например стихи, бывает до половины полосы.)
+  const pageWidth = Math.max(...words.map(word => word.right));
+  const wide = boxes.find(box => box.right - box.left > pageWidth * 0.55);
+  if (wide) {
+    throw new Error(`«${from} … ${to}»: a line spans ${Math.round(((wide.right - wide.left) * 100) / pageWidth)}% of the page — tesseract merged columns; use "region" items instead`);
+  }
+  return boxes;
+}
+
+// Все слова с этой основой внутри рамки материала (проценты полосы): находка сканера
+// закрывает каждое вхождение термина в материале, а не только первое.
+function findStem(words, stem, whole, within, size) {
+  const target = normalize(stem);
+  const [left, top, right, bottom] = within ?? [0, 0, 100, 100];
+  const inside = word => {
+    const x = (((word.left + word.right) / 2) * 100) / size.width;
+    const y = (((word.top + word.bottom) / 2) * 100) / size.height;
+    return x >= left && x <= right && y >= top && y <= bottom;
+  };
+  const matches = text => (whole ? text === target : text.startsWith(target));
+  const found = [];
+  for (const [index, word] of words.entries()) {
+    if (!inside(word)) continue;
+    if (matches(word.word)) found.push([word]);
+    // Перенос между строками: «са-» / «таниста».
+    else if (word.word.endsWith('-') && words[index + 1] && matches(word.word.slice(0, -1) + words[index + 1].word)) {
+      found.push([word, words[index + 1]]);
+    }
+  }
+  return found;
+}
+
+// Сколько раз основа встречается в тексте материала от Claude: если tesseract нашёл меньше
+// (декоративный шрифт заголовка, грязная печать), куратор получит предупреждение.
+async function countStemInArticle(item) {
+  const data = JSON.parse(await readFile(join(dir, `sheet-${pad(item.sheet)}.json`), 'utf8'));
+  const article = data.result.articles.find(entry => (entry.title ?? entry.rubric) === item.inArticle);
+  if (!article) return { expected: 0, checkTitle: false };
+  const retold = /^\s*\[|\[(?:краткое|текст|пересказ)/i.test(article.text ?? '');
+  const stem = normalize(item.stem);
+  const pattern = new RegExp(`(?<![\\p{L}\\p{N}-])${stem}${item.whole ? '(?![\\p{L}\\p{N}])' : ''}`, 'gu');
+  const count = text => (String(text ?? '').toLowerCase().replace(/ё/g, 'е').match(pattern) ?? []).length;
+  // У пересказанного материала сравнивать не с чем, кроме заголовка: его просим проверить глазами.
+  if (retold) return { expected: 0, checkTitle: count([article.rubric, article.title].join(' ')) > 0 };
+  return { expected: count([article.rubric, article.title, article.byline, article.text].join('\n')), checkTitle: false };
+}
+
+// Полоса в оттенках серого при 300 dpi (PGM), для обводки текста по пикселям.
+const grayPages = new Map();
+async function grayPage(sheet) {
+  if (!grayPages.has(sheet)) {
+    const { stdout } = await run('pdftoppm', ['-f', String(sheet), '-l', String(sheet), '-r', String(DPI), '-singlefile', '-gray', pdf], {
+      encoding: 'buffer',
+      maxBuffer: 256 * 1024 * 1024,
+    });
+    const header = stdout.toString('latin1', 0, 64).match(/^P5\s+(\d+)\s+(\d+)\s+255\s/);
+    grayPages.set(sheet, { width: Number(header[1]), height: Number(header[2]), pixels: stdout.subarray(header[0].length) });
+  }
+  return grayPages.get(sheet);
+}
+
+// hug: плашка ступеньками по фактическому краю текста. Для каждой строки пикселей ищется
+// последняя «чернильная» точка слева направо до тёмной заливки соседнего блока (окно, где
+// больше 75% пикселей тёмные: белые буквы на чёрном фоне её не прерывают), края сглаживаются
+// на высоту строки и режутся на полосы по 8 пикселей.
+async function hugBoxes(sheet, area) {
+  const { width, pixels } = await grayPage(sheet);
+  const INK = 110;
+  // Доля тёмного в квадрате вокруг точки: у текста на бумаге она редко выше половины, у
+  // чёрного блока с белыми буквами — почти всегда выше двух третей.
+  const HALF_W = 12;
+  const HALF_H = 10;
+  const w = area.right - area.left + 1;
+  const h = area.bottom - area.top + 1;
+  const sum = new Int32Array((w + 1) * (h + 1));
+  for (let y = 0; y < h; y += 1) {
+    let rowSum = 0;
+    for (let x = 0; x < w; x += 1) {
+      rowSum += pixels[(area.top + y) * width + area.left + x] < INK ? 1 : 0;
+      sum[(y + 1) * (w + 1) + x + 1] = sum[y * (w + 1) + x + 1] + rowSum;
+    }
+  }
+  const density = (x, y) => {
+    const x0 = Math.max(0, x - HALF_W);
+    const x1 = Math.min(w, x + HALF_W + 1);
+    const y0 = Math.max(0, y - HALF_H);
+    const y1 = Math.min(h, y + HALF_H + 1);
+    const dark = sum[y1 * (w + 1) + x1] - sum[y0 * (w + 1) + x1] - sum[y1 * (w + 1) + x0] + sum[y0 * (w + 1) + x0];
+    return dark / ((x1 - x0) * (y1 - y0));
+  };
+  const rows = [];
+  for (let y = 0; y < h; y += 1) {
+    let result = -1;
+    for (let x = 0; x < w; x += 1) {
+      if (density(x, y) > 0.66) {
+        // Начался тёмный блок: текст кончился за полокна до него.
+        break;
+      }
+      if (pixels[(area.top + y) * width + area.left + x] < INK) result = area.left + x;
+    }
+    // Последние HALF_W пикселей перед границей — уже край блока, а не буквы.
+    rows.push(result);
+  }
+  const inked = rows.map(right => right >= area.left);
+  const first = inked.indexOf(true);
+  const last = inked.lastIndexOf(true);
+  if (first < 0) return [];
+  const RADIUS = 16;
+  const smooth = rows.map((_, index) => Math.max(...rows.slice(Math.max(0, index - RADIUS), index + RADIUS + 1)));
+  const boxes = [];
+  for (let y = first; y <= last; y += 8) {
+    const right = Math.max(...smooth.slice(y, y + 8));
+    if (right < area.left) continue;
+    boxes.push({ left: area.left, top: area.top + y, right: right + 6, bottom: area.top + Math.min(y + 8, last + 4) });
+  }
+  return boxes;
+}
+
+async function boxesFor(item) {
+  const size = pageSize(item.sheet);
+  const fromPercent = ([left, top, right, bottom]) => ({
+    left: Math.round((left * size.width) / 100),
+    top: Math.round((top * size.height) / 100),
+    right: Math.round((right * size.width) / 100),
+    bottom: Math.round((bottom * size.height) / 100),
+  });
+  if (item.box) return { boxes: [fromPercent(item.box)] };
+  // Примерная область, а плашки — по словам tesseract внутри неё, построчно: ровно по тексту
+  // и не задевая соседнюю колонку, даже если её край скошен.
+  if (item.region) {
+    const area = fromPercent(item.region);
+    const inside = word => {
+      const x = (word.left + word.right) / 2;
+      const y = (word.top + word.bottom) / 2;
+      return x >= area.left && x <= area.right && y >= area.top && y <= area.bottom;
+    };
+    const found = lineBoxes((await readWords(item.sheet)).filter(inside));
+    if (!found.length) throw new Error(`Sheet ${item.sheet}: no tesseract words inside region ${item.region}; use "box"`);
+    // fill: одна плашка на всю ширину области, по высоте — от первой до последней строки.
+    // Для целой заметки в колонке: tesseract часто не дочитывает концы строк.
+    if (item.hug) {
+      const top = Math.min(...found.map(box => box.top)) - 8;
+      const bottom = Math.max(...found.map(box => box.bottom)) + 8;
+      return { boxes: await hugBoxes(item.sheet, { ...area, top, bottom }) };
+    }
+    if (item.fill) {
+      return { boxes: [{ left: area.left, right: area.right, top: Math.min(...found.map(box => box.top)) - 6, bottom: Math.max(...found.map(box => box.bottom)) + 6 }] };
+    }
+    return { boxes: found.map(box => ({ left: box.left - 5, top: box.top - 6, right: box.right + 5, bottom: box.bottom + 6 })) };
+  }
+  if (item.article) {
+    const sheet = JSON.parse(await readFile(join(dir, `sheet-${pad(item.sheet)}.json`), 'utf8'));
+    const article = sheet.result.articles.find(entry => (entry.title ?? '').toLowerCase().includes(item.article.toLowerCase()));
+    if (!article?.box) throw new Error(`Sheet ${item.sheet}: no article titled «${item.article}»`);
+    return { boxes: [fromPercent(article.box)] };
+  }
+  let shortfall = 0;
+  let found;
+  if (item.stem) {
+    const groups = findStem(await readWords(item.sheet), item.stem, item.whole, item.within, size);
+    const { expected, checkTitle } = await countStemInArticle(item);
+    // checked: куратор посмотрел полосу глазами и добавил недостающие рамки вручную.
+    shortfall = item.checked ? 0 : checkTitle ? 'title' : Math.max(0, expected - groups.length);
+    found = groups.flat();
+  } else if (item.from) {
+    found = findSpan(await readWords(item.sheet), item.from, item.to);
+  } else {
+    found = findPhrase(await readWords(item.sheet), item.find, item.all);
+  }
+  if (!found.length) {
+    // Нерешённую находку сканера показываем без рамки; одобренную без рамки закрасить нельзя.
+    if (!item.approved) return { boxes: [], missing: true };
+    throw new Error(`Sheet ${item.sheet}: «${item.find ?? item.stem ?? `${item.from} … ${item.to}`}» not found by tesseract; give a "box" instead`);
+  }
+  // Запас, чтобы не остались края букв.
+  return { boxes: found.map(box => ({ left: box.left - 5, top: box.top - 6, right: box.right + 5, bottom: box.bottom + 6 })), shortfall };
+}
+
+// Статус решения: approved — закрасить; keep — рассмотрено и оставлено; иначе ждёт решения.
+const status = item => (item.approved ? 'ok' : item.keep ? 'keep' : 'wait');
+const colors = { ok: '#d0261b', keep: '#8c8a83', wait: '#e08a00' };
+const statusLabels = { ok: 'Закрасить', keep: 'Оставить', wait: 'Ждёт решения' };
+const items = [];
+const warnings = [];
+const pad5 = box => ({ left: box.left - 5, top: box.top - 6, right: box.right + 5, bottom: box.bottom + 6 });
+const allSheets = (await readdir(dir)).map(name => name.match(/^words-(\d+)\.tsv$/)?.[1]).filter(Boolean).map(Number).sort((a, b) => a - b);
+for (const [index, item] of spec.items.entries()) {
+  if (!item.name) {
+    items.push({ ...item, number: index + 1, ...(await boxesFor(item)) });
+    continue;
+  }
+  for (const sheet of allSheets) {
+    // Телепрограмма — список передач, в ней ничего не закрываем (решение команды).
+    const sheetData = JSON.parse(await readFile(join(dir, `sheet-${pad(sheet)}.json`), 'utf8'));
+    if (sheetData.result?.pageType === 'tv') continue;
+    const exempt = await exemptArticles(sheet, item.exceptIn);
+    const size = pageSize(sheet);
+    const insideExempt = box => exempt.some(({ box: [left, top, right, bottom] }) => {
+      const x = (((box.left + box.right) / 2) * 100) / size.width;
+      const y = (((box.top + box.bottom) / 2) * 100) / size.height;
+      return x >= left && x <= right && y >= top && y <= bottom;
+    });
+    const found = findName(await readWords(sheet), item.name).filter(box => !insideExempt(box));
+    const expected = await countNameInText(sheet, item.name, exempt);
+    if (found.length < expected && !item.checked) warnings.push(`Лист ${sheet}: «${item.name}» в тексте ${expected} раз, tesseract нашёл ${found.length} — проверьте полосу и добавьте "box".`);
+    if (found.length) items.push({ ...item, sheet, number: index + 1, boxes: found.map(pad5) });
+  }
+}
+for (const item of items.filter(entry => entry.shortfall && !entry.keep)) {
+  warnings.push(item.shortfall === 'title'
+    ? `Лист ${item.sheet}, № ${item.number}: «${item.stem}…» есть в заголовке, а текст материала Claude пересказал — проверьте заголовок глазами, декоративный шрифт tesseract часто не читает.`
+    : `Лист ${item.sheet}, № ${item.number}: «${item.stem}…» в тексте встречается ещё ${item.shortfall} раз(а), а tesseract их не нашёл (заголовок, перенос, грязь) — добавьте "box".`);
+}
+for (const item of items.filter(entry => entry.missing && !entry.keep)) {
+  warnings.push(`Лист ${item.sheet}, № ${item.number}: «${item.find ?? item.word ?? item.stem}» tesseract не нашёл — рамку нужно задать вручную ("box").`);
+}
+for (const warning of warnings) console.warn(warning);
+const sheets = [...new Set(items.map(item => item.sheet))].sort((a, b) => a - b);
+const work = await mkdtemp(join(tmpdir(), 'redact-'));
+
+async function renderPage(sheet, dpi) {
+  const prefix = join(work, `page-${pad(sheet)}-${dpi}`);
+  await run('pdftoppm', ['-f', String(sheet), '-l', String(sheet), '-r', String(dpi), '-singlefile', '-png', pdf, prefix]);
+  return `${prefix}.png`;
+}
+
+if (!apply) {
+  // Превью в 120 dpi: красные рамки с номерами решений.
+  const scale = 120 / DPI;
+  const out = join(dir, 'review');
+  await mkdir(out, { recursive: true });
+  for (const sheet of sheets) {
+    const draw = items
+      .filter(item => item.sheet === sheet)
+      .flatMap(item => item.boxes.flatMap(box => [
+        '-stroke', colors[status(item)], '-strokewidth', '3', '-fill', 'none',
+        '-draw', `rectangle ${Math.round(box.left * scale)},${Math.round(box.top * scale)} ${Math.round(box.right * scale)},${Math.round(box.bottom * scale)}`,
+        '-stroke', 'none', '-fill', colors[status(item)], '-font', font, '-pointsize', '22',
+        '-annotate', `+${Math.round(box.right * scale) + 4}+${Math.round(box.top * scale) + 18}`, String(item.number),
+      ]));
+    await run('magick', [await renderPage(sheet, 120), ...draw, '-quality', '82', join(out, `sheet-${pad(sheet)}.jpg`)]);
+  }
+  const escape = value => String(value ?? '').replace(/[&<>"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[char]);
+  const html = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Закраска на одобрение</title>
+<style>body{margin:0 auto;max-width:1000px;padding:24px 16px;font:15px/1.45 system-ui,sans-serif;background:#fbfaf7;color:#1d1b18}
+h1{font-size:22px}h2{font-size:17px;margin:32px 0 8px}img{width:100%;border:1px solid #ddd8cf}ol{padding-left:20px}li{margin:6px 0}
+.ok{color:#d0261b;font-weight:600}.wait{color:#b46a00;font-weight:600}.keep{color:#8c8a83;font-weight:600}small{color:#6b665e}</style></head><body>
+<h1>Закраска на одобрение</h1>
+${warnings.length ? `<p class="wait">${warnings.map(escape).join('<br>')}</p>` : ''}
+<p>Красная рамка — будет закрашено, серая — рассмотрено и оставлено, оранжевая — ждёт решения. Номер рядом с рамкой — номер в списке.</p>
+${sheets.map(sheet => `<h2>Лист ${sheet}</h2><ol>${items.filter(item => item.sheet === sheet).map(item => `<li value="${item.number}"><span class="${status(item)}">${statusLabels[status(item)]}</span> · ${escape(item.name ? `все упоминания «${item.name}» (${item.boxes.length} на листе)${item.rule ? ', общее правило' : ''}` : item.stem ? `«${item.word}» и все слова на «${item.stem}» в материале (${item.boxes.length})` : item.from ? `от «${item.from}» до «${item.to}»` : item.find ? `${item.all ? 'все вхождения' : 'слово или фраза'} «${item.find}»` : item.article ? `материал «${item.article}» целиком` : 'область')}${item.categoryLabel ? ` <small>· ${escape(item.categoryLabel)}</small>` : ''}<br><small>${escape(item.reason ?? (item.excerpt ? `${item.inArticle ? `«${item.inArticle}»: ` : ''}${item.excerpt}` : ''))}</small></li>`).join('')}</ol><img src="review/sheet-${pad(sheet)}.jpg" alt="Лист ${sheet}">`).join('')}
+</body></html>`;
+  await writeFile(join(dir, 'review.html'), html);
+  console.log(`${items.length} decisions on ${sheets.length} sheets, ${items.filter(item => item.approved).length} approved, ${items.filter(item => item.keep).length} kept. Review: ${join(dir, 'review.html')}`);
+} else {
+  const approved = items.filter(item => item.approved);
+  const changed = [...new Set(approved.map(item => item.sheet))];
+  await run('pdfseparate', [pdf, join(work, 'orig-%03d.pdf')]);
+  const comparisons = [];
+  for (const sheet of changed.sort((a, b) => a - b)) {
+    const draw = approved
+      .filter(item => item.sheet === sheet)
+      // Только чёрная плашка, без надписи: она ничего не добавляет читателю (решение команды).
+      .flatMap(item => item.boxes.flatMap(box => ['-fill', INK, '-draw', `rectangle ${box.left},${box.top} ${box.right},${box.bottom}`]));
+    const redacted = join(work, `redacted-${pad(sheet)}.png`);
+    const original = await renderPage(sheet, DPI);
+    await run('magick', [original, ...draw, redacted]);
+    // Для проверки: слева оригинал, справа то, что увидит читатель.
+    const comparison = join(work, `compare-${pad(sheet)}.jpg`);
+    await run('magick', [
+      original, redacted, '-resize', '50%', '-bordercolor', 'white', '-border', '20', '+append',
+      '-gravity', 'North', '-background', 'white', '-splice', '0x70', '-font', font, '-pointsize', '34', '-fill', '#1d1b18',
+      '-annotate', '+0+18', `Лист ${sheet}: слева оригинал, справа публичная версия`, '-quality', '80', comparison,
+    ]);
+    comparisons.push(comparison);
+    // Новая страница — только картинка с плашками: прежнего изображения полосы в ней нет.
+    await run('magick', [redacted, '-units', 'PixelsPerInch', '-density', String(DPI), '-compress', 'jpeg', '-quality', '85', join(work, `orig-${String(sheet).padStart(3, '0')}.pdf`)]);
+  }
+  const parts = (await readdir(work)).filter(name => /^orig-\d{3}\.pdf$/.test(name)).sort().map(name => join(work, name));
+  const output = option('out', join(dir, basename(pdf).replace(/\.pdf$/, ' (публичная версия).pdf')));
+  await run('pdfunite', [...parts, output]);
+  const compareOutput = output.replace(/\(публичная версия\)\.pdf$/, '(сравнение).pdf');
+  if (comparisons.length) await run('magick', [...comparisons, compareOutput]);
+  console.log(`Redacted ${approved.length} decisions on sheets ${changed.join(', ')}: ${output}`);
+  if (comparisons.length) console.log(`Comparison: ${compareOutput}`);
+}
+await rm(work, { recursive: true, force: true });
