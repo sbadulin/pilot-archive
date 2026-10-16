@@ -96,6 +96,26 @@ Selectel CDN не принимает основной домен второго 
 
 До выполнения этих шагов перенос не считать завершённым и не переключать production DNS.
 
+## Посетители российского сайта
+
+Счётчиков на сайте нет: посетителей считаем по журналу запросов Caddy на российском сервере. Журнал включён блоком `log` в `deploy/Caddyfile`, хранится 30 дней в `/var/log/caddy/` и не покидает сервер (IP-адреса — персональные данные).
+
+Включить на сервере (один раз):
+
+```sh
+scp deploy/Caddyfile scripts/visitor-report.sh <сервер>:/tmp/
+ssh <сервер>
+sudo cp /tmp/Caddyfile /etc/caddy/Caddyfile && sudo systemctl reload caddy
+sudo apt install -y jq goaccess
+```
+
+Отчёт (данные копятся с момента включения журнала, истории до него нет):
+
+```sh
+sudo bash /tmp/visitor-report.sh              # по дням: посетители, просмотры, открытия выпусков
+sudo bash /tmp/visitor-report.sh report.html  # подробный отчёт GoAccess; забрать через scp
+```
+
 ## Команды восстановленного проекта
 
 ```sh

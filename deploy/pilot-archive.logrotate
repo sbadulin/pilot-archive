@@ -1,0 +1,10 @@
+/var/log/caddy/pilot-archive.log {
+    daily
+    rotate 29
+    maxage 29
+    missingok
+    compress
+    delaycompress
+    copytruncate
+    su caddy caddy
+}

@@ -1,7 +1,8 @@
-import {useEffect, useId, useMemo, useState} from "react";
+import {useEffect, useId, useMemo, useRef, useState} from "react";
 import {Search} from "lucide-react";
 import {authorsIndexUrl} from "./config";
 import {MIN_QUERY, searchNames} from "./authorSearch";
+import {trackAuthor} from "./authorAnalytics";
 import type {Issue} from "./metadata";
 import type {IndexName} from "../functions/api/_lib/authorsIndex";
 
@@ -19,6 +20,7 @@ export function AuthorSearch({issues, onClose}: {issues: Issue[]; onClose: () =>
   const [index, setIndex] = useState<IndexName[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [selected, setSelected] = useState<IndexName | null>(null);
+  const lastSearch = useRef("");
 
   // The index is fetched on first use: most visitors never search.
   useEffect(() => {
@@ -45,6 +47,25 @@ export function AuthorSearch({issues, onClose}: {issues: Issue[]; onClose: () =>
   const long = query.trim().length >= MIN_QUERY;
   const credits = selected?.credits ?? [];
 
+  const recordSearch = () => {
+    const key = query.trim().replace(/\s+/g, " ").toLocaleLowerCase("ru");
+    if (!visible || key.length < MIN_QUERY || key === lastSearch.current) return;
+    lastSearch.current = key;
+    trackAuthor("search", key, matches.length);
+  };
+
+  useEffect(() => {
+    if (selected || !visible || !long) return;
+    const timer = window.setTimeout(recordSearch, 1200);
+    return () => window.clearTimeout(timer);
+  }, [query, visible, selected, long, matches.length]);
+
+  const selectAuthor = (entry: IndexName) => {
+    recordSearch();
+    trackAuthor("select", entry.name);
+    setSelected(entry);
+  };
+
   return (
     <section className="author-search" aria-label="Поиск по авторам">
       <label className="visually-hidden" htmlFor={`${listId}-input`}>
@@ -67,7 +88,7 @@ export function AuthorSearch({issues, onClose}: {issues: Issue[]; onClose: () =>
             setSelected(null);
           }}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && matches[0]) setSelected(matches[0]);
+            if (event.key === "Enter" && matches[0]) selectAuthor(matches[0]);
             if (event.key === "Escape" && !query) onClose();
           }}
         />
@@ -76,7 +97,7 @@ export function AuthorSearch({issues, onClose}: {issues: Issue[]; onClose: () =>
         <ul className="author-suggestions" id={listId} role="listbox">
           {matches.map((entry) => (
             <li key={entry.key + entry.name} role="option" aria-selected={false}>
-              <button type="button" onClick={() => setSelected(entry)}>
+              <button type="button" onClick={() => selectAuthor(entry)}>
                 <span>{entry.name}</span>
                 <span className="author-count">{materialCount(entry.credits.length)}</span>
               </button>

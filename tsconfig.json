@@ -17,6 +17,7 @@
   },
   "include": [
     "src",
-    "functions"
+    "functions",
+    "deploy/telegram-relay"
   ]
 }
