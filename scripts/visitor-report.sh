@@ -7,13 +7,25 @@
 # Посетитель — уникальная пара «IP + браузер» за день. Боты отбрасываются; «Просмотры» —
 # открытия сайта (адреса выпусков после # на сервер не приходят, поэтому выпуски считаются
 # по первым запросам к их PDF). Нужен jq, для HTML-отчёта — goaccess (apt install jq goaccess).
+#
+# Свои адреса (редакция, кураторы) не считаются: их перечисляют по одному в строке в
+# /etc/caddy/visitor-exclude-ips (или в EXCLUDE_FILE), либо через пробел в EXCLUDE_IPS.
+# Подходит и начало адреса для динамических IP: «84.231.». Строки с # — комментарии.
 set -euo pipefail
 LOG_DIR=${LOG_DIR:-/var/log/caddy}
+EXCLUDE_FILE=${EXCLUDE_FILE:-/etc/caddy/visitor-exclude-ips}
 shopt -s nullglob
 logs=("$LOG_DIR"/pilot-archive*.log*)
 [[ ${#logs[@]} -gt 0 ]] || { echo "Нет журналов в $LOG_DIR: проверьте блок log в Caddyfile" >&2; exit 1; }
+command -v jq >/dev/null || { echo "Установите jq: apt install jq" >&2; exit 1; }
 
-cat_logs() { for f in "${logs[@]}"; do case "$f" in *.gz) zcat "$f" ;; *) cat "$f" ;; esac; done; }
+excluded=$( { [[ -r $EXCLUDE_FILE ]] && sed 's/#.*//' "$EXCLUDE_FILE"; printf '%s\n' ${EXCLUDE_IPS:-}; } | awk 'NF {print $1}' | jq -R . | jq -sc .)
+
+cat_logs() {
+  for f in "${logs[@]}"; do case "$f" in *.gz) zcat "$f" ;; *) cat "$f" ;; esac; done |
+    jq -c --argjson skip "$excluded" 'select((.request.remote_ip // "") as $ip | any($skip[]; . as $p | $ip | startswith($p)) | not)'
+}
+[[ $excluded == "[]" ]] || echo "Без адресов: $(jq -r 'join(", ")' <<<"$excluded")" >&2
 
 if [[ $# -ge 1 ]]; then
   command -v goaccess >/dev/null || { echo "Установите goaccess: apt install goaccess" >&2; exit 1; }
@@ -22,7 +34,6 @@ if [[ $# -ge 1 ]]; then
   exit 0
 fi
 
-command -v jq >/dev/null || { echo "Установите jq: apt install jq" >&2; exit 1; }
 rows=$(mktemp)
 trap 'rm -f "$rows"' EXIT
 cat_logs | jq -r '
