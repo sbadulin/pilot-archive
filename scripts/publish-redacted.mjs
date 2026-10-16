@@ -32,13 +32,18 @@ const aws = (...rest) => execFileSync('aws', ['--endpoint-url', endpoint, ...res
 // timeout (on a slow uplink multipart parts time out and are resent). Selectel answers 409
 // for a key while a PUT to it runs, so uploading in place would take the issue off the
 // site for the whole upload; the server-side copy that follows swaps it in at once.
-const put = (file, key, type) => {
+const put = (file, key, type, disposition) => {
   const staging = `staging/${key}`;
   execFileSync('aws', ['--endpoint-url', endpoint, '--cli-read-timeout', '0', 's3api', 'put-object',
     '--bucket', privateBucket, '--key', staging, '--body', file, '--content-type', type], { stdio: 'pipe' });
   aws('s3api', 'copy-object', '--bucket', bucket, '--key', key, '--copy-source', `${privateBucket}/${staging}`,
-    '--metadata-directive', 'REPLACE', '--content-type', type, '--cache-control', cacheControl);
+    '--metadata-directive', 'REPLACE', '--content-type', type, '--cache-control', cacheControl,
+    ...(disposition ? ['--content-disposition', disposition] : []));
 };
+// Saved from the browser's own PDF viewer the file would be called issue.pdf; this names it
+// after the issue, with an ASCII fallback for clients that ignore filename*.
+const dispositionOf = issue => `inline; filename="Pervyi-Pilot-${issue.number}-${issue.serial}-${issue.year}.pdf"; ` +
+  `filename*=UTF-8''${encodeURIComponent(issue.filename).replace(/[()'*!]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)}`;
 const keyOf = url => url.replace(/^https?:\/\/[^/]+/, '').replace(/^\//, '');
 const exists = key => { try { aws('s3api', 'head-object', '--bucket', privateBucket, '--key', key); return true; } catch { return false; } };
 
@@ -74,7 +79,7 @@ for (const issue of issues) {
   console.log(`${id}: ${pdfKey}${coverChanged ? ` + cover ${coverKey}` : ''}`);
   if (!apply) continue;
 
-  put(publicPdf, pdfKey, 'application/pdf');
+  put(publicPdf, pdfKey, 'application/pdf', dispositionOf(issue));
   const size = JSON.parse(aws('s3api', 'head-object', '--bucket', bucket, '--key', pdfKey)).ContentLength;
   if (size !== statSync(publicPdf).size) throw new Error(`${id}: uploaded ${size} bytes, expected ${statSync(publicPdf).size}`);
   if (coverChanged) {
