@@ -28,6 +28,9 @@ const cacheRoot = join(archiveRoot, 'pilot-archive-fulltext-cache');
 const cacheControl = 'public,max-age=86400';
 
 const aws = (...rest) => execFileSync('aws', ['--endpoint-url', endpoint, ...rest], { encoding: 'utf8' });
+// One PUT without a read timeout: on a slow uplink multipart parts time out and are resent.
+const put = (file, key, type) => execFileSync('aws', ['--endpoint-url', endpoint, '--cli-read-timeout', '0', 's3api', 'put-object',
+  '--bucket', bucket, '--key', key, '--body', file, '--content-type', type, '--cache-control', cacheControl], { stdio: 'pipe' });
 const keyOf = url => url.replace(/^https?:\/\/[^/]+/, '').replace(/^\//, '');
 const exists = key => { try { aws('s3api', 'head-object', '--bucket', privateBucket, '--key', key); return true; } catch { return false; } };
 
@@ -63,13 +66,13 @@ for (const issue of issues) {
   console.log(`${id}: ${pdfKey}${coverChanged ? ` + cover ${coverKey}` : ''}`);
   if (!apply) continue;
 
-  aws('s3', 'cp', publicPdf, `s3://${bucket}/${pdfKey}`, '--content-type', 'application/pdf', '--cache-control', cacheControl, '--only-show-errors');
+  put(publicPdf, pdfKey, 'application/pdf');
   const size = JSON.parse(aws('s3api', 'head-object', '--bucket', bucket, '--key', pdfKey)).ContentLength;
   if (size !== statSync(publicPdf).size) throw new Error(`${id}: uploaded ${size} bytes, expected ${statSync(publicPdf).size}`);
   if (coverChanged) {
     const cover = join(work, `${id}-cover`);
     execFileSync('pdftoppm', ['-f', '1', '-l', '1', '-scale-to-x', '439', '-scale-to-y', '-1', '-singlefile', '-jpeg', '-jpegopt', 'quality=85', publicPdf, cover]);
-    aws('s3', 'cp', `${cover}.jpg`, `s3://${bucket}/${coverKey}`, '--content-type', 'image/jpeg', '--cache-control', cacheControl, '--only-show-errors');
+    put(`${cover}.jpg`, coverKey, 'image/jpeg');
   }
 }
 console.log(problems ? `\n${problems} issue(s) need attention.` : '\nAll issues matched.');
