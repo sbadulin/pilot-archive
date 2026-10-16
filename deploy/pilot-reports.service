@@ -1,0 +1,16 @@
+[Unit]
+Description=Pilot archive local statistics and Telegram reports
+After=network-online.target caddy.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/pilot-reports/telegram-report.py scheduled
+User=root
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/pilot-reports
+TimeoutStartSec=120
