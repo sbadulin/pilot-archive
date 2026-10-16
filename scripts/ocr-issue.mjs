@@ -127,7 +127,12 @@ async function readText(page) {
   const sheet = { ...issue, sheet: page, printedPage: null, model: 'claude-code', durationMs: Date.now() - started };
   try {
     if (response.is_error) throw new Error(response.result);
-    await writeFile(out, JSON.stringify({ ...sheet, status: 'ok', result: parseJson(response.result) }, null, 2));
+    const result = parseJson(response.result);
+    // Плотный пейджер Claude иногда «распознаёт» без текстов — это тот же отказ: в следующий
+    // прогон полоса прочитается по частям.
+    const textLength = (result.articles ?? []).reduce((sum, article) => sum + (article.text ?? '').length, 0);
+    if (result.pageType === 'pager' && textLength < 500) throw new Error(`pager page with only ${textLength} characters of text`);
+    await writeFile(out, JSON.stringify({ ...sheet, status: 'ok', result }, null, 2));
     return 'ok';
   } catch (error) {
     // Ответ сохраняем рядом, чтобы разобрать сбой, но sheet-NN.json не пишем: следующий прогон повторит полосу.
