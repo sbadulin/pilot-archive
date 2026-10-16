@@ -9,12 +9,13 @@
 //   node scripts/publish-redacted.mjs --apply          # uploads
 //   node scripts/publish-redacted.mjs --apply 2000-27  # only issues whose id starts so
 //
-// Needs the AWS_* credentials for Selectel (AWS_PROFILE=selectel, AWS_CA_BUNDLE).
-// After uploading, purge the cache of the public bucket domain in the Selectel panel.
+// Needs the AWS_* credentials for Selectel (AWS_PROFILE=selectel, AWS_CA_BUNDLE) and SSH to
+// the Russian server in front of the site (PILOT_RELAY, PILOT_RELAY_KEY). The cache of the
+// bucket domain picks the new objects up by itself (the site answered age: 0 right after).
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 const args = process.argv.slice(2);
 const apply = args.includes('--apply');
@@ -26,28 +27,48 @@ const publicBase = (process.env.SELECTEL_PUBLIC_BASE_URL ?? 'https://pilot-archi
 const archiveRoot = process.env.PILOT_ARCHIVE_ROOT ?? join(homedir(), 'Downloads/Reading');
 const cacheRoot = join(archiveRoot, 'pilot-archive-fulltext-cache');
 const cacheControl = 'public,max-age=86400';
+const relay = process.env.PILOT_RELAY ?? 'root@135.106.210.25';
+const relayKey = process.env.PILOT_RELAY_KEY ?? join(homedir(), '.ssh/pilot_archive_gateway');
+// aws cli v2 ships its own Python with botocore inside; presign-put.py signs PUT URLs with it.
+const awsPython = process.env.AWS_CLI_PYTHON ??
+  join(dirname(realpathSync(execFileSync('which', ['aws'], { encoding: 'utf8' }).trim())), 'python');
 
 const aws = (...rest) => execFileSync('aws', ['--endpoint-url', endpoint, ...rest], { encoding: 'utf8' });
-// The file goes to a staging key in the private bucket first, in one PUT without a read
-// timeout (on a slow uplink multipart parts time out and are resent). Selectel answers 409
-// for a key while a PUT to it runs, so uploading in place would take the issue off the
-// site for the whole upload; the server-side copy that follows swaps it in at once.
+// From abroad a PUT to Selectel crawls at ~20 KB/s per connection and is aborted after
+// 15 minutes, while SSH to the Russian server is fast. So the file goes there by scp, the
+// server PUTs it to a staging key in the private bucket over a presigned URL (no Selectel
+// keys on the server), and a server-side copy swaps it in at once: Selectel answers 409
+// for a key while a PUT to it runs, so uploading in place would take the issue offline.
+const ssh = ['-i', relayKey, '-o', 'BatchMode=yes', '-o', 'ServerAliveInterval=30', '-o', 'LogLevel=ERROR'];
 const put = (file, key, type, disposition) => {
   const staging = `staging/${key}`;
-  execFileSync('aws', ['--endpoint-url', endpoint, '--cli-read-timeout', '0', 's3api', 'put-object',
-    '--bucket', privateBucket, '--key', staging, '--body', file, '--content-type', type], { stdio: 'pipe' });
+  const remote = `/tmp/relay-${key.replaceAll('/', '_')}`;
+  execFileSync('scp', ['-q', ...ssh, file, `${relay}:${remote}`], { stdio: 'pipe' });
+  const url = execFileSync(awsPython, [join(import.meta.dirname, 'presign-put.py'), privateBucket, staging, type], { encoding: 'utf8' }).trim();
+  const code = execFileSync('ssh', [...ssh, relay,
+    `curl -s -o /dev/null -w '%{http_code}' -T ${remote} -H 'Content-Type: ${type}' '${url}'; rm -f ${remote}`], { encoding: 'utf8' }).trim();
+  if (code !== '200') throw new Error(`${key}: PUT from ${relay} answered ${code}`);
   aws('s3api', 'copy-object', '--bucket', bucket, '--key', key, '--copy-source', `${privateBucket}/${staging}`,
     '--metadata-directive', 'REPLACE', '--content-type', type, '--cache-control', cacheControl,
     ...(disposition ? ['--content-disposition', disposition] : []));
+  aws('s3api', 'delete-object', '--bucket', privateBucket, '--key', staging);
 };
 // Saved from the browser's own PDF viewer the file would be called issue.pdf; this names it
 // after the issue, with an ASCII fallback for clients that ignore filename*.
+// Uploaded files may carry technical names (2026.06.07_PP0201_2002.12.pdf): those get «ПП №NN(SSSS)-YYYY».
+const nameOf = issue => issue.filename?.startsWith('ПП') ? issue.filename : `ПП №${issue.number}(${issue.serial})-${issue.year}.pdf`;
 const dispositionOf = issue => `inline; filename="Pervyi-Pilot-${issue.number}-${issue.serial}-${issue.year}.pdf"; ` +
-  `filename*=UTF-8''${encodeURIComponent(issue.filename).replace(/[()'*!]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)}`;
+  `filename*=UTF-8''${encodeURIComponent(nameOf(issue)).replace(/[()'*!]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)}`;
 const keyOf = url => url.replace(/^https?:\/\/[^/]+/, '').replace(/^\//, '');
 const exists = key => { try { aws('s3api', 'head-object', '--bucket', privateBucket, '--key', key); return true; } catch { return false; } };
 
-const response = await fetch(`${publicBase}/archive/manifest.json`, { cache: 'no-store' });
+// The bucket domain behind the site now and then answers 502 for a moment.
+let response;
+for (let attempt = 1; attempt <= 3; attempt++) {
+  response = await fetch(`${publicBase}/archive/manifest.json`, { cache: 'no-store' });
+  if (response.ok) break;
+  await new Promise(resolve => setTimeout(resolve, 5000));
+}
 if (!response.ok) throw new Error(`Live manifest unavailable: HTTP ${response.status}`);
 const { issues } = await response.json();
 const work = mkdtempSync(join(tmpdir(), 'publish-redacted-'));
