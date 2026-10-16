@@ -28,9 +28,17 @@ const cacheRoot = join(archiveRoot, 'pilot-archive-fulltext-cache');
 const cacheControl = 'public,max-age=86400';
 
 const aws = (...rest) => execFileSync('aws', ['--endpoint-url', endpoint, ...rest], { encoding: 'utf8' });
-// One PUT without a read timeout: on a slow uplink multipart parts time out and are resent.
-const put = (file, key, type) => execFileSync('aws', ['--endpoint-url', endpoint, '--cli-read-timeout', '0', 's3api', 'put-object',
-  '--bucket', bucket, '--key', key, '--body', file, '--content-type', type, '--cache-control', cacheControl], { stdio: 'pipe' });
+// The file goes to a staging key in the private bucket first, in one PUT without a read
+// timeout (on a slow uplink multipart parts time out and are resent). Selectel answers 409
+// for a key while a PUT to it runs, so uploading in place would take the issue off the
+// site for the whole upload; the server-side copy that follows swaps it in at once.
+const put = (file, key, type) => {
+  const staging = `staging/${key}`;
+  execFileSync('aws', ['--endpoint-url', endpoint, '--cli-read-timeout', '0', 's3api', 'put-object',
+    '--bucket', privateBucket, '--key', staging, '--body', file, '--content-type', type], { stdio: 'pipe' });
+  aws('s3api', 'copy-object', '--bucket', bucket, '--key', key, '--copy-source', `${privateBucket}/${staging}`,
+    '--metadata-directive', 'REPLACE', '--content-type', type, '--cache-control', cacheControl);
+};
 const keyOf = url => url.replace(/^https?:\/\/[^/]+/, '').replace(/^\//, '');
 const exists = key => { try { aws('s3api', 'head-object', '--bucket', privateBucket, '--key', key); return true; } catch { return false; } };
 
