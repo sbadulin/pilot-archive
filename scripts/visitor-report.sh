@@ -23,7 +23,10 @@ excluded=$( { [[ -r $EXCLUDE_FILE ]] && sed 's/#.*//' "$EXCLUDE_FILE"; printf '%
 
 cat_logs() {
   for f in "${logs[@]}"; do case "$f" in *.gz) zcat "$f" ;; *) cat "$f" ;; esac; done |
-    jq -c --argjson skip "$excluded" 'select((.request.remote_ip // "") as $ip | any($skip[]; . as $p | $ip | startswith($p)) | not)'
+    jq -c --argjson skip "$excluded" '
+      select((.request.remote_ip // "") as $ip | any($skip[]; . as $p | $ip | startswith($p)) | not)
+      # Боты и скрипты, включая браузерные тесты CI (node, HeadlessChrome), которые читают живой сайт.
+      | select((.request.headers["User-Agent"][0] // "") | test("bot|crawl|spider|preview|curl|wget|python|monitor|^node$|headless"; "i") | not)'
 }
 [[ $excluded == "[]" ]] || echo "Без адресов: $(jq -r 'join(", ")' <<<"$excluded")" >&2
 
@@ -38,7 +41,6 @@ rows=$(mktemp)
 trap 'rm -f "$rows"' EXIT
 cat_logs | jq -r '
   select(.request.uri == "/" or .request.uri == "/index.html")
-  | select((.request.headers["User-Agent"][0] // "") | test("bot|crawl|spider|preview|curl|wget|python|monitor"; "i") | not)
   | [(.ts | floor | strftime("%Y-%m-%d")), .request.remote_ip, (.request.headers["User-Agent"][0] // "")]
   | @tsv' > "$rows"
 
