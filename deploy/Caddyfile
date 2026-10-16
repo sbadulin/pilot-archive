@@ -7,11 +7,18 @@ pilot-archive.ru {
     # персональные данные, поэтому журнал хранится не дольше 30 дней и не уходит с сервера.
     log {
         output file /var/log/caddy/pilot-archive.log {
-            roll_size 50MiB
-            roll_keep_for 720h
+            # Daily rotation and expiry are handled by deploy/pilot-archive.logrotate.
+            # Size-only rotation can leave old requests in a small active log forever.
+            roll_disabled
         }
         format json
     }
+    @authorStats {
+        path /_stats/author
+        method GET
+    }
+    header @authorStats Cache-Control "no-store"
+    respond @authorStats "" 204
     @root path /
     rewrite @root /index.html
     reverse_proxy https://{$S3_PUBLIC_HOST} {

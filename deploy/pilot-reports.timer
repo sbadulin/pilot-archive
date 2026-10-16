@@ -1,0 +1,11 @@
+[Unit]
+Description=Collect daily statistics and send due reports at 09:00 Moscow
+
+[Timer]
+OnCalendar=*-*-* 00:10:00 Europe/Moscow
+OnCalendar=*-*-* 09:00:00 Europe/Moscow
+Persistent=true
+Unit=pilot-reports.service
+
+[Install]
+WantedBy=timers.target
