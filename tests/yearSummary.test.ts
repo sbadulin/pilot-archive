@@ -16,3 +16,8 @@ test('a year without dated issues has no label', () => {
   assert.equal(yearMonthsLabel([]), '');
   assert.equal(yearMonthsLabel(dated('')), '');
 });
+
+test('a special issue names no month: its date only orders it', () => {
+  assert.equal(yearMonthsLabel([{ date: '2025-01-01', number: '00' }]), 'Специальный выпуск');
+  assert.equal(yearMonthsLabel([{ date: '2000-01-01', number: '00' }, { date: '2000-09-13', number: '37' }]), 'Сентябрь');
+});

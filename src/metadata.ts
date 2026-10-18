@@ -21,8 +21,12 @@ export const issueLabel = (issue: { number: string | number; serial?: string }) 
 export const issueShortLabel = (issue: { number: string | number }) => isSpecial(issue) ? SPECIAL_LABEL : `№ ${issue.number}`;
 const monthNames = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
 // "Январь–август" from the issue dates, so the year summary follows the archive as issues are added.
-export function yearMonthsLabel(issues: Pick<Issue, 'date'>[]) {
-  const months = issues.map((issue) => Number(issue.date.slice(5, 7))).filter((month) => month >= 1 && month <= 12);
+// A special issue's date only orders it (its real release date is unknown), so it names no month;
+// a year with nothing but special issues reads «Специальный выпуск».
+export function yearMonthsLabel(issues: (Pick<Issue, 'date'> & { number?: string })[]) {
+  const regular = issues.filter((issue) => issue.number === undefined || !isSpecial({ number: issue.number }));
+  if (issues.length && !regular.length) return 'Специальный выпуск';
+  const months = regular.map((issue) => Number(issue.date.slice(5, 7))).filter((month) => month >= 1 && month <= 12);
   if (!months.length) return '';
   const [first, last] = [Math.min(...months), Math.max(...months)];
   const label = first === last ? monthNames[first - 1] : `${monthNames[first - 1]}–${monthNames[last - 1]}`;
