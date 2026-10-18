@@ -17,7 +17,7 @@ export async function onRequestPost(context: any) {
   const name = String(input?.name ?? '').replace(/\s+/g, ' ').trim();
   const title = String(input?.title ?? '').replace(/\s+/g, ' ').trim() || null;
   const kind = String(input?.kind ?? 'article');
-  if (!(year >= 1996 && year <= 2007) || !/^\d{2,3}$/.test(number) || !/^\d{0,5}$/.test(serial)) return json({ error: 'Выберите номер газеты.' }, { status: 400 });
+  if (!(year >= 1996 && year <= 2025) || !/^\d{2,3}$/.test(number) || !/^\d{0,5}$/.test(serial)) return json({ error: 'Выберите номер газеты.' }, { status: 400 });
   if (!Number.isInteger(page) || page < 1 || page > 100) return json({ error: 'Укажите страницу номера.' }, { status: 400 });
   if (!normalizeName(name) || name.length > 200) return json({ error: 'Укажите имя автора.' }, { status: 400 });
   if (!KINDS.has(kind) || (title && title.length > 300)) return json({ error: 'Проверьте тип и заголовок материала.' }, { status: 400 });

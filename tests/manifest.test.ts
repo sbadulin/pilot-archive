@@ -81,3 +81,15 @@ test('storage keys normalise padding and keep staging out of the archive', () =>
   assert.equal(issueKey(2000, '7', '72', id), `submissions/2000/issue-07-0072/${id}.pdf`);
   assert.ok(!issueKey(2000, '7', '72', id).startsWith('archive/'), 'staging stays outside the archive');
 });
+
+test('the 2025 special issue joins the manifest as number 00, serial 0000', () => {
+  const special = submission({ id: 'special', year: 2025, number: '00', serial: '0000', date: '2025-06-01', dateLabel: '1 июня 2025 г.', pages: 8, filename: 'ПП №00(0000)-01.06.2025.pdf' });
+  const { issues } = composeManifest(baseCatalog, [special], publicBase);
+  assert.equal(issues.length, baseCatalog.length + 1);
+  const published = issues.find(item => item.year === 2025);
+  assert.equal(published?.slug, 'issue-00-0000');
+  assert.equal(published?.pdfUrl, `${publicBase}/archive/2025/issue-00-0000/issue-special.pdf`);
+  assert.equal(published?.coverUrl, `${publicBase}/archive/2025/issue-00-0000/cover-special.jpg`);
+  assert.equal(issues.at(-1), published, 'the newest issue sorts last');
+  assert.equal(issueSlug('0', '0'), 'issue-00-0000');
+});
