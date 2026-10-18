@@ -6,7 +6,8 @@ export function validateIssueInput(input: any) {
   const dateLabel = String(input?.dateLabel ?? '').trim();
   const filename = String(input?.filename ?? '').trim();
   const pages = Number(input?.pages);
-  if (!Number.isInteger(year) || year < 1996 || year > 2007) return 'Год должен быть в диапазоне 1996–2007.';
+  // 2025 is reserved for the special issue (number 00), which is staged by hand; browser uploads still need number ≥ 1.
+  if (!Number.isInteger(year) || year < 1996 || year > 2025) return 'Год должен быть в диапазоне 1996–2007 (или 2025 для спецвыпуска).';
   if (!/^\d{1,3}$/.test(number) || Number(number) < 1) return 'Проверьте номер выпуска.';
   if (serial && !/^\d{1,5}$/.test(serial)) return 'Проверьте сквозной номер.';
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T12:00:00Z`))) return 'Проверьте дату выпуска.';
