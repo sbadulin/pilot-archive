@@ -28,6 +28,10 @@ day=$((10#${BASH_REMATCH[3]})); month=$((10#${BASH_REMATCH[4]})); year=${BASH_RE
 months=(января февраля марта апреля мая июня июля августа сентября октября ноября декабря)
 date=$(printf %04d-%02d-%02d "$year" "$month" "$day")
 label="$day ${months[month-1]} $year г."
+# A special issue (number 00, serial 0000, see docs/PUBLISHING.md) has no exact date: the site
+# titles it «Спецвыпуск», and the date in the name only orders it within the year.
+[[ $num == 00 ]] && label="$year год"
+label=${PILOT_DATE_LABEL:-$label}
 slug=issue-$num-$serial
 cache=$root/pilot-archive-fulltext-cache/$year-$num-$serial
 public=$(ls "$cache"/*"(публичная версия).pdf" 2>/dev/null | head -1)
