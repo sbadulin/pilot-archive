@@ -112,11 +112,17 @@ function PdfCanvas({
   page,
   width = 900,
   rotation = 0,
+  hold = false,
+  onSettled,
 }: {
   pdf: PDFDocumentProxy;
   page: number;
   width?: number;
   rotation?: number;
+  // Wait: the sheet's scan is the same full image whatever the size, so a thumbnail drawn
+  // first delays the page the reader came for.
+  hold?: boolean;
+  onSettled?: () => void; // drawn or failed
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const container = useRef<HTMLDivElement>(null);
@@ -141,7 +147,7 @@ function PdfCanvas({
     setError("");
     const target = canvas.current;
     if (!target) return;
-    if (!near) {
+    if (!near || hold) {
       target.width = 0;
       target.height = 0;
       return;
@@ -164,11 +170,15 @@ function PdfCanvas({
         target.height = viewport.height;
         task = sheet.render({canvas: target, viewport});
         await task.promise;
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          onSettled?.();
+        }
       } catch (e) {
         if (!cancelled && (e as Error).name !== "RenderingCancelledException") {
           setError("Не удалось показать страницу. Выберите её ещё раз.");
           setLoading(false);
+          onSettled?.();
         }
       }
     };
@@ -177,7 +187,8 @@ function PdfCanvas({
       cancelled = true;
       task?.cancel();
     };
-  }, [pdf, page, width, rotation, near]);
+    // onSettled is left out: a new callback each render must not draw the page again.
+  }, [pdf, page, width, rotation, near, hold]);
   return (
     <div
       ref={container}
@@ -372,6 +383,9 @@ function Reader({
   );
   const [largePages, setLargePages] = useState<number[]>([]);
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
+  // Thumbnails wait for the open sheet, so the linked page comes first.
+  const [sheetShown, setSheetShown] = useState(false);
+  const thumbnails = useRef<HTMLElement>(null);
   const [pdfError, setPdfError] = useState(false);
   const [baseWidth, setBaseWidth] = useState(740);
   const viewport = useRef<HTMLDivElement>(null);
@@ -414,13 +428,17 @@ function Reader({
         document = result;
         if (disposed) void result.destroy();
         else {
-          setPdf(result);
-          const areas: number[] = [];
-          for (let n = 1; n <= result.numPages; n++) {
-            const sheet = await result.getPage(n);
-            const viewport = sheet.getViewport({scale: 1});
-            areas.push(viewport.width * viewport.height);
-          }
+          // All sheet sizes at once: asked one by one, each waited for its own range request,
+          // and a link deep into an issue took seconds.
+          const areas = await Promise.all(
+            Array.from({length: result.numPages}, (_, index) =>
+              result.getPage(index + 1).then((sheet) => {
+                const viewport = sheet.getViewport({scale: 1});
+                return viewport.width * viewport.height;
+              }),
+            ),
+          );
+          if (disposed) return;
           const sorted = [...areas].sort((a, b) => a - b);
           const typical = sorted[Math.floor(sorted.length / 2)] || 0;
           const detected = areas.flatMap((area, index) =>
@@ -432,6 +450,8 @@ function Reader({
             initialPage,
           );
           setPage((current) => (current === initialSheet ? linked : current));
+          // Drawing starts only now, on the linked sheet: no image of a neighbour is fetched first.
+          setPdf(result);
         }
       })
       .catch(() => {
@@ -442,6 +462,14 @@ function Reader({
       void document?.destroy();
     };
   }, [issue.id]);
+  // The open page's thumbnail in view: its neighbours are drawn, not the cover and pages 2–7.
+  useEffect(() => {
+    const list = thumbnails.current;
+    const selected = list?.querySelector<HTMLElement>(".thumbnail.selected");
+    if (!list || !selected) return;
+    const top = selected.offsetTop - list.offsetTop - (list.clientHeight - selected.offsetHeight) / 2;
+    list.scrollTo({top: Math.max(0, top)});
+  }, [page, pdf]);
   useEffect(() => {
     const element = viewport.current;
     if (!element) return;
@@ -600,7 +628,7 @@ function Reader({
       </div>
       <div className="reader-body">
         {showPages && (
-          <nav className="thumbnails" aria-label="Страницы выпуска">
+          <nav className="thumbnails" aria-label="Страницы выпуска" ref={thumbnails}>
             {Array.from({length: issue.pages}, (_, i) => i + 1).map((n) => (
               <button
                 key={n}
@@ -609,7 +637,7 @@ function Reader({
                 onClick={() => goPage(n)}
               >
                 {pdf ? (
-                  <PdfCanvas pdf={pdf} page={n} width={110} />
+                  <PdfCanvas pdf={pdf} page={n} width={110} hold={viewMode === "sheet" && !sheetShown} />
                 ) : (
                   <span className="page-placeholder">{numbering.label(n)}</span>
                 )}
@@ -636,6 +664,7 @@ function Reader({
                     page={page}
                     width={(baseWidth * zoom) / 100}
                     rotation={rotation}
+                    onSettled={() => setSheetShown(true)}
                   />
                 ) : (
                   <p className="pdf-loading">Открываем PDF…</p>

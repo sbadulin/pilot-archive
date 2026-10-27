@@ -287,6 +287,8 @@ test('a remark in brackets in another message is the profile\'s comment, not a m
   assert.deepEqual(mentionsOf(built, pt).map((message) => message.text), [addressed.text]);
   assert.deepEqual(remarksOf(built, profileOf(built, 'Svetk@')!), [], 'only the editorial has remarks');
   assert.deepEqual(parsePagerRoute('#pager/ПТ/remarks'), { nick: 'ПТ', tab: 'remarks', with: null });
+  assert.equal(profileOf(built, 'Рыженький (ПТ)'), pt, 'the nick in brackets');
+  assert.equal(profileOf(model, 'Дима (г. Комсомольск)'), null, 'a town in brackets is not a nick');
 });
 
 test("a nick's bylines in the newspaper bring their articles", () => {

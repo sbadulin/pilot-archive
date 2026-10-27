@@ -53,7 +53,11 @@ export function preparePager(site: PagerSite): PagerModel {
 
 // The profile a printed name belongs to («Icepac (лэйбл Outlow)» → ICEPAC), or null.
 export function profileOf(model: PagerModel, name: string): string | null {
-  return model.byName.get(foldCase(normalizeName(nickCore(name)))) ?? model.byName.get(foldCase(normalizeName(name))) ?? null;
+  const find = (value: string) => model.byName.get(foldCase(normalizeName(value)));
+  // «Рыженький (ПТ)»: a description with the nick in brackets. «Дима (г. Амурск)» is a town.
+  const bracketed = name.match(/\(([^()]+)\)/)?.[1]?.trim();
+  const town = bracketed && /^(?:г\.\s*)?\p{Lu}\p{Ll}+ск(?!\p{L})/u.test(bracketed);
+  return find(nickCore(name)) ?? find(name) ?? (bracketed && !town ? find(bracketed) : undefined) ?? null;
 }
 
 // «В газете»: the profile's signed materials, oldest first.
