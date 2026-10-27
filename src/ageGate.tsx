@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { trackAdultConfirmed } from "./authorAnalytics";
 
 // Архив публикуется в исходном виде, поэтому маркирован 18+ (436-ФЗ «О защите детей от
 // информации»). Закон требует ограничить доступ, а не проверять документы: достаточно
@@ -54,6 +55,7 @@ export function AgeGate({ children }: { children: ReactNode }) {
                 autoFocus
                 onClick={() => {
                   rememberConfirmed();
+                  trackAdultConfirmed();
                   setConfirmed(true);
                 }}
               >
