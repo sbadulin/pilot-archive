@@ -3,10 +3,25 @@
   "aliases": {
     "Умиротворенный BAD": "BAD",
     "Бэд": "BAD",
-    "БЭД": "BAD"
+    "БЭД": "BAD",
+    "Talless RAT": "Rat",
+    "RAT": "Rat"
   },
   "distinct": [
-    ["BAD", "Bad Girl", "BadGirl", "Bad Boy", "Bad Cirh", "Крошка Bad Girl", "Ангел Bad Girl"],
-    ["Kurt", "Kurtочк@", "Kurtovk@", "Kurtочка"]
+    [
+      "BAD",
+      "Bad Girl",
+      "BadGirl",
+      "Bad Boy",
+      "Bad Cirh",
+      "Крошка Bad Girl",
+      "Ангел Bad Girl"
+    ],
+    [
+      "Kurt",
+      "Kurtочк@",
+      "Kurtovk@",
+      "Kurtочка"
+    ]
   ]
 }
