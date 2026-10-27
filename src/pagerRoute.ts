@@ -36,3 +36,16 @@ export function pagerHash(nick?: string | null, tab: PagerTab = 'own', other?: s
   if (tab === 'dialogs' && other) return `${base}/dialogs/${segment(other)}`;
   return tab === 'own' ? base : `${base}/${tab}`;
 }
+
+// The browser keeps a URL percent-encoded (location.href is «#pager/%D0%A1…») and copying the
+// address bar gives that, whatever the bar shows. For sharing, letters come back as letters; ASCII
+// escapes (%20, %25, %2F…) stay, or a messenger would cut the link at a space.
+export function readableUrl(href: string): string {
+  return href.replace(/(?:%[89a-f][0-9a-f])+/giu, (bytes) => {
+    try {
+      return decodeURIComponent(bytes);
+    } catch {
+      return bytes;
+    }
+  });
+}

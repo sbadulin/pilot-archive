@@ -530,6 +530,8 @@ button, a { transition: background-color .15s, color .15s, border-color .15s; }
 .pg-search { margin: 0; width: 100%; }
 .pg-examples { margin: 0; color: var(--muted); font-size: 14px; }
 .pg-examples a { color: var(--ink); }
+.pg-copy { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--line); background: transparent; color: var(--ink); font: inherit; font-size: 14px; cursor: pointer; }
+.pg-copy:hover { border-color: var(--ink); }
 .pg-muted { color: var(--muted); font-size: 14px; }
 .pg-status { padding: 24px 0; }
 .pg-retry { border: 1px solid var(--ink); background: transparent; padding: 4px 10px; }
