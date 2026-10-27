@@ -1,3 +1,4 @@
+import PageerPrototype from "./prototype/PageerPrototype"; // PROTOTYPE
 "use client";
 
 import {
@@ -68,7 +69,8 @@ type Screen =
   | {kind: "archive"}
   | {kind: "reader"; id: number | string; page?: number}
   | {kind: "upload"}
-  | {kind: "authors"};
+  | {kind: "authors"}
+  | {kind: "pageer"}; // PROTOTYPE
 type Draft = {
   file: File;
   pdf: PDFDocumentProxy;
@@ -1637,7 +1639,9 @@ export default function Home() {
               issue.serial === issueMatch[3].padStart(4, "0"),
           )
         : undefined;
-      if (hash === "#authors" && !isPublicSite()) {
+      if (hash === "#pageer") {
+        setScreen({kind: "pageer"}); // PROTOTYPE
+      } else if (hash === "#authors" && !isPublicSite()) {
         setScreen({kind: "authors"});
       } else if (hash.startsWith("#add")) {
         if (isPublicSite()) {
@@ -1726,6 +1730,10 @@ export default function Home() {
           >
             Люди
           </a>
+          {/* PROTOTYPE */}
+          <a href="#pageer" className={screen.kind === "pageer" ? "active" : ""}>
+            Pageer
+          </a>
           {__ADMIN__ && isCurator && (
             <a
               href="#authors"
@@ -1747,7 +1755,9 @@ export default function Home() {
         )}
         <AdultBadge />
       </header>
-      {screen.kind === "upload" ? (
+      {screen.kind === "pageer" ? (
+        <PageerPrototype />
+      ) : screen.kind === "upload" ? (
         __ADMIN__ ? <Upload onBack={back} /> : null
       ) : screen.kind === "authors" && isCurator ? (
         <Suspense fallback={null}>
