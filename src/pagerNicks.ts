@@ -164,20 +164,26 @@ export function nickKey(from: string, rules: NickRules = {}): string {
   return normalizeName(aliasOf(core, rules) ?? core);
 }
 
+// Авторы подписи: совместная («ICEPAC&Liga-X») — каждый из них, иначе сама подпись.
+export function signatureAuthors(from: string, rules: NickRules = {}): { authors: string[]; joint: boolean } {
+  const authors = jointOf(nickCore(from), rules);
+  return authors ? { authors, joint: true } : { authors: [from], joint: false };
+}
+
 export function buildNicks(messages: NickMessage[], rules: NickRules = {}): Nick[] {
   const groups = new Map<string, { spellings: Map<string, number>; ids: string[]; dates: string[]; target: string | null }>();
   for (const message of messages) {
     if (!message.from?.trim()) continue;
     const core = nickCore(message.from);
-    const authors = jointOf(core, rules);
-    for (const author of authors ?? [message.from]) {
+    const { authors, joint } = signatureAuthors(message.from, rules);
+    for (const author of authors) {
       const key = nickKey(author, rules);
       if (!key) continue;
       let group = groups.get(key);
       if (!group) groups.set(key, (group = { spellings: new Map(), ids: [], dates: [], target: null }));
       group.spellings.set(core, (group.spellings.get(core) ?? 0) + 1);
       // A joint signature names the author's profile by the author, never by the joint spelling.
-      group.target ??= authors ? (aliasOf(nickCore(author), rules) ?? author) : aliasOf(core, rules);
+      group.target ??= joint ? (aliasOf(nickCore(author), rules) ?? author) : aliasOf(core, rules);
       group.ids.push(message.id);
       group.dates.push(message.date);
     }

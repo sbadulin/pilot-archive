@@ -1,0 +1,213 @@
+// Pure logic of the «Пейджер» section: routes, mentions, dialogs, search. The view is pagerView.tsx.
+// Only 'unique' nicks have profiles (pager.json); addressees that look like a real «Имя Фамилия»
+// are shown as printed but never linked, searched or collected (152-ФЗ).
+import { normalizeName } from './authorNames.ts';
+import { foldCase, matchesQuery, MIN_QUERY } from './authorSearch.ts';
+import { classifyNick, nickCore } from './pagerNicks.ts';
+import { messageWhere, type PagerSite, type SiteMessage, type SiteProfile } from './pagerSite.ts';
+
+export { MIN_QUERY };
+export { PAGER_TABS, isPagerHash, pagerHash, parsePagerRoute, type PagerRoute, type PagerTab } from './pagerRoute.ts';
+
+export type FeedMessage = { id: string; date: string; issue: string; sheet: number; from: string | null; to: string[]; text: string; nicks: string[]; toKeys: (string | null)[] };
+export type PagerModel = {
+  messages: FeedMessage[]; // oldest first
+  profiles: Map<string, SiteProfile>;
+  own: Map<string, FeedMessage[]>; // profile key → its messages
+  byName: Map<string, string>; // normalized name or spelling → profile key
+  names: string[]; // every profile name and spelling, for cutting longer nicks out of texts
+};
+
+export function preparePager(site: PagerSite): PagerModel {
+  const messages = site.messages.map((message: SiteMessage): FeedMessage => {
+    const { issue, sheet } = messageWhere(message.id);
+    return { id: message.id, date: site.dates[issue] ?? '', issue, sheet, from: message.from ?? null, to: message.to ?? [], text: message.text, nicks: message.nicks ?? [], toKeys: [] };
+  });
+  messages.sort((a, b) => a.date.localeCompare(b.date));
+  const profiles = new Map(site.profiles.map((profile) => [profile.key, profile]));
+  const byName = new Map<string, string>();
+  for (const profile of site.profiles) byName.set(profile.key, profile.key);
+  for (const profile of site.profiles) {
+    for (const name of [profile.name, ...profile.spellings]) {
+      const key = normalizeName(name);
+      if (key && !byName.has(key)) byName.set(key, profile.key);
+    }
+  }
+  const model: PagerModel = { messages, profiles, own: new Map(), byName, names: [] };
+  // Which addressees are profiles, worked out once: mentions, dialogs and links all need it.
+  for (const message of messages) message.toKeys = message.to.map((name) => profileOf(model, name));
+  const own = model.own;
+  for (const message of messages) for (const key of message.nicks) own.set(key, [...(own.get(key) ?? []), message]);
+  model.names = [...new Set(site.profiles.flatMap((profile) => [profile.name, ...profile.spellings]))];
+  return model;
+}
+
+// The profile a printed name belongs to («Icepac (лэйбл Outlow)» → ICEPAC), or null.
+export function profileOf(model: PagerModel, name: string): string | null {
+  return model.byName.get(normalizeName(nickCore(name))) ?? model.byName.get(normalizeName(name)) ?? null;
+}
+
+// --- Mentions ---
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const isAllCaps = (name: string) => name === name.toUpperCase() && name !== name.toLowerCase();
+
+// A name in a text: after a non-letter, any ending («BAD'a», «BADy»). Short names (up to 3 letters)
+// only in their own case and as a whole word, except an all-caps nick before a lowercase ending:
+// otherwise «Кот» would find every «Котёнок» and «Neo» every «Neon».
+function namePattern(name: string): RegExp {
+  const body = escapeRegExp(name);
+  const letters = name.replace(/[^\p{L}\p{N}]/gu, '').length;
+  if (letters > 3) return new RegExp(`(?:^|[^\\p{L}\\p{N}])${body}`, 'iu');
+  const after = isAllCaps(name) ? '(?![\\p{Lu}\\p{N}])' : '(?![\\p{L}\\p{N}])';
+  return new RegExp(`(?:^|[^\\p{L}\\p{N}])${body}${after}`, 'u');
+}
+
+/**
+ * Messages addressed to the profile or naming it in the text, except its own. Longer nicks that
+ * start with one of its names («Bad Girl» for «BAD») are cut out of the text first.
+ */
+export function mentionsOf(model: PagerModel, key: string): FeedMessage[] {
+  const profile = model.profiles.get(key);
+  if (!profile) return [];
+  const names = [...new Set([profile.name, ...profile.spellings].filter((name) => name.trim()))];
+  const lower = names.map((name) => name.toLocaleLowerCase('ru'));
+  const longer = model.names
+    .filter((other) => {
+      const value = other.toLocaleLowerCase('ru');
+      return !lower.includes(value) && lower.some((name) => value.startsWith(name));
+    })
+    .sort((a, b) => b.length - a.length)
+    .map((other) => new RegExp(escapeRegExp(other), 'giu'));
+  const patterns = names.map(namePattern);
+  return model.messages.filter((message) => {
+    if (message.nicks.includes(key)) return false;
+    if (message.toKeys.includes(key)) return true;
+    const text = longer.reduce((acc, pattern) => acc.replace(pattern, ' '), message.text);
+    return patterns.some((pattern) => pattern.test(text));
+  });
+}
+
+// --- Dialogs ---
+
+export type Dialog = { other: string; messages: FeedMessage[]; mine: number; theirs: number };
+
+/**
+ * The profile's exchanges with other profiles: its messages addressed to X and X's messages
+ * addressed to it or naming it. Two-sided conversations first, then the longest.
+ */
+export function dialogsOf(model: PagerModel, key: string, mentions = mentionsOf(model, key)): Dialog[] {
+  const threads = new Map<string, Dialog>();
+  const add = (other: string, message: FeedMessage, mine: boolean) => {
+    if (other === key || !model.profiles.has(other)) return;
+    let thread = threads.get(other);
+    if (!thread) threads.set(other, (thread = { other, messages: [], mine: 0, theirs: 0 }));
+    if (thread.messages.includes(message)) return;
+    thread.messages.push(message);
+    if (mine) thread.mine++;
+    else thread.theirs++;
+  };
+  for (const message of model.own.get(key) ?? []) {
+    for (const other of message.toKeys) if (other) add(other, message, true);
+  }
+  for (const message of mentions) for (const author of message.nicks) add(author, message, false);
+  for (const thread of threads.values()) thread.messages.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id, 'en', { numeric: true }));
+  const name = (other: string) => model.profiles.get(other)?.name ?? other;
+  return [...threads.values()].sort(
+    (a, b) =>
+      Number(b.mine > 0 && b.theirs > 0) - Number(a.mine > 0 && a.theirs > 0) ||
+      b.messages.length - a.messages.length ||
+      name(a.other).localeCompare(name(b.other), 'ru'),
+  );
+}
+
+// --- Search ---
+
+// «Имя Фамилия» at the start of an addressee: a real person, never searchable.
+const REAL_NAME = /^[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+(?:\s|$)/u;
+export const isSearchableAddressee = (name: string) => !REAL_NAME.test(name.trim()) && classifyNick(name) !== 'realName';
+
+export type PagerHit =
+  | { kind: 'author'; key: string; name: string; count: number; keys: string[] }
+  | { kind: 'to'; key: string; name: string; count: number; keys: string[] };
+
+export function pagerSearchIndex(model: PagerModel): PagerHit[] {
+  const authors: PagerHit[] = [...model.profiles.values()].map((profile) => ({
+    kind: 'author',
+    key: profile.key,
+    name: profile.name,
+    count: model.own.get(profile.key)?.length ?? 0,
+    keys: [...new Set([profile.key, ...[profile.name, ...profile.spellings].map((name) => normalizeName(name))])],
+  }));
+  const addressees = new Map<string, { spellings: Map<string, number>; count: number }>();
+  for (const message of model.messages) {
+    const seen = new Set<string>();
+    message.to.forEach((name, i) => {
+      if (message.toKeys[i] || seen.has(name) || !isSearchableAddressee(name)) return;
+      seen.add(name);
+      const key = normalizeName(name);
+      if (!key) return;
+      let entry = addressees.get(key);
+      if (!entry) addressees.set(key, (entry = { spellings: new Map(), count: 0 }));
+      entry.count++;
+      entry.spellings.set(name, (entry.spellings.get(name) ?? 0) + 1);
+    });
+  }
+  const to: PagerHit[] = [...addressees].map(([key, entry]) => ({
+    kind: 'to',
+    key,
+    name: [...entry.spellings].sort((a, b) => b[1] - a[1])[0][0],
+    count: entry.count,
+    keys: [key],
+  }));
+  return [...authors, ...to];
+}
+
+// Exact names first («bad» → BAD before Bad Girl), then nicks with a profile, then addressees;
+// addressees keep a couple of places even when many nicks match.
+export function searchPager(index: PagerHit[], query: string, limit = 8): PagerHit[] {
+  if (query.trim().length < MIN_QUERY) return [];
+  const exact = foldCase(normalizeName(query));
+  const rank = (hit: PagerHit) => (hit.keys.some((key) => foldCase(key) === exact) ? 0 : 1);
+  const order = (a: PagerHit, b: PagerHit) => rank(a) - rank(b) || b.count - a.count || a.name.localeCompare(b.name, 'ru');
+  const found = index.filter((hit) => matchesQuery(query, hit.keys));
+  const authors = found.filter((hit) => hit.kind === 'author').sort(order);
+  const to = found.filter((hit) => hit.kind === 'to').sort(order);
+  const toPlaces = Math.min(to.length, Math.max(2, limit - authors.length));
+  return [...authors.slice(0, limit - toPlaces), ...to.slice(0, toPlaces)].sort((a, b) => rank(a) - rank(b));
+}
+
+// Messages addressed to a searched addressee (by its normalized name).
+export const addressedTo = (model: PagerModel, key: string) =>
+  model.messages.filter((message) => message.to.some((name) => normalizeName(name) === key));
+
+// --- Labels ---
+
+const MONTHS = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+const MONTHS_OF = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+
+// «2000-03» → «Март 2000».
+export function monthLabel(month: string): string {
+  const name = MONTHS[Number(month.slice(5, 7)) - 1] ?? '';
+  return `${name.charAt(0).toUpperCase()}${name.slice(1)} ${month.slice(0, 4)}`.trim();
+}
+
+// «2000-03-08» → «8 марта 2000».
+export function dateLabel(date: string): string {
+  const month = MONTHS_OF[Number(date.slice(5, 7)) - 1];
+  return month ? `${Number(date.slice(8, 10))} ${month} ${date.slice(0, 4)}` : date;
+}
+
+// «2000-01-0066» → the parts issueLabel needs.
+export function issueParts(issue: string) {
+  const [year, number, serial] = issue.split('-');
+  return { year: Number(year), number, serial };
+}
+
+export function pluralWord(count: number, one: string, few: string, many: string) {
+  const tens = count % 100;
+  const units = count % 10;
+  return units === 1 && tens !== 11 ? one : units >= 2 && units <= 4 && (tens < 10 || tens >= 20) ? few : many;
+}
+
+export const plural = (count: number, one: string, few: string, many: string) => `${count} ${pluralWord(count, one, few, many)}`;

@@ -34,6 +34,10 @@ import {Checkbox} from "./checkbox";
 import {AuthorSearch} from "./authorSearchView";
 import {AdultBadge} from "./ageGate";
 import {openPdf} from "./pdf";
+import {isPagerHash} from "./pagerRoute";
+
+// The «Пейджер» section is its own chunk: most visitors read issues and never open it.
+const PagerSection = lazy(() => import("./pagerView"));
 
 // Curator tools are split out and exist only in the admin build (__ADMIN__ is set by build.mjs):
 // the public site never downloads them.
@@ -68,7 +72,8 @@ type Screen =
   | {kind: "archive"}
   | {kind: "reader"; id: number | string; page?: number}
   | {kind: "upload"}
-  | {kind: "authors"};
+  | {kind: "authors"}
+  | {kind: "pager"};
 type Draft = {
   file: File;
   pdf: PDFDocumentProxy;
@@ -1637,7 +1642,11 @@ export default function Home() {
               issue.serial === issueMatch[3].padStart(4, "0"),
           )
         : undefined;
-      if (hash === "#authors" && !isPublicSite()) {
+      if (isPagerHash(hash)) {
+        // The section scrolls by itself: Back to the feed returns to the same place in it.
+        setScreen((current) => (current.kind === "pager" ? current : {kind: "pager"}));
+        return;
+      } else if (hash === "#authors" && !isPublicSite()) {
         setScreen({kind: "authors"});
       } else if (hash.startsWith("#add")) {
         if (isPublicSite()) {
@@ -1671,6 +1680,8 @@ export default function Home() {
   }, [archiveIssues]);
   const back = useCallback(() => navigate({kind: "archive"}), [navigate]);
   useEffect(() => {
+    // The «Пейджер» section names its own pages (a profile's nick).
+    if (screen.kind === "pager") return;
     const activeIssue =
       screen.kind === "reader"
         ? archiveIssues.find((item) => item.id === screen.id)
@@ -1726,6 +1737,9 @@ export default function Home() {
           >
             Люди
           </a>
+          <a href="#pager" className={screen.kind === "pager" ? "active" : ""}>
+            Пейджер
+          </a>
           {__ADMIN__ && isCurator && (
             <a
               href="#authors"
@@ -1747,7 +1761,11 @@ export default function Home() {
         )}
         <AdultBadge />
       </header>
-      {screen.kind === "upload" ? (
+      {screen.kind === "pager" ? (
+        <Suspense fallback={<main id="main" className="shell pager-page" />}>
+          <PagerSection issues={archiveIssues} />
+        </Suspense>
+      ) : screen.kind === "upload" ? (
         __ADMIN__ ? <Upload onBack={back} /> : null
       ) : screen.kind === "authors" && isCurator ? (
         <Suspense fallback={null}>

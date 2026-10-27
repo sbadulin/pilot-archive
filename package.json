@@ -24,6 +24,8 @@
     "pager:public": "node --experimental-strip-types scripts/pager-public.mjs",
     "pager:nicks": "node --experimental-strip-types scripts/pager-nicks.mjs",
     "pager:update": "npm run pager:index && npm run pager:public && npm run pager:nicks",
+    "pager:site": "node --experimental-strip-types scripts/pager-site.mjs",
+    "pager:publish": "node scripts/pager-publish.mjs",
     "pager:review": "python3 scripts/pager-review/prep.py && python3 scripts/pager-review/build.py",
     "build:all": "npm run build && npm run build:admin",
     "check": "npm run typecheck && npm test && npm run test:reports && npm run verify:archive && npm run build:all && node scripts/verify-build.mjs",
