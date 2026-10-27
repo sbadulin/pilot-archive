@@ -43,7 +43,12 @@ export function preparePager(site: PagerSite): PagerModel {
   }
   const model: PagerModel = { messages, profiles, own: new Map(), byName, names: [], featured: [] };
   // Which addressees are profiles, worked out once: mentions, dialogs and links all need it.
-  for (const message of messages) message.toKeys = message.to.map((name) => profileOf(model, name));
+  // A profile with listed mentions is the addressee only there: other «Натуська» are other girls.
+  const listed = (key: string | null, id: string) => {
+    const only = key ? profiles.get(key)?.mentions : undefined;
+    return !only || only.includes(id) ? key : null;
+  };
+  for (const message of messages) message.toKeys = message.to.map((name) => listed(profileOf(model, name), message.id));
   const own = model.own;
   for (const message of messages) for (const key of message.nicks) own.set(key, [...(own.get(key) ?? []), message]);
   model.names = [...new Set(site.profiles.flatMap((profile) => [profile.name, ...profile.spellings, ...(profile.aka ?? [])]))];
@@ -108,6 +113,10 @@ export function remarksOf(model: PagerModel, key: string): FeedMessage[] {
 export function mentionsOf(model: PagerModel, key: string): FeedMessage[] {
   const profile = model.profiles.get(key);
   if (!profile) return [];
+  if (profile.mentions) {
+    const listed = new Set(profile.mentions);
+    return model.messages.filter((message) => listed.has(message.id));
+  }
   const names = profileNames(profile);
   const remarks = remarkPattern(names);
   const lower = names.map((name) => name.toLocaleLowerCase('ru'));

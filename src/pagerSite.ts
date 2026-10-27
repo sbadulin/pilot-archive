@@ -26,7 +26,9 @@ export type SiteArticle = { issue: string; page: number; kind: string; title: st
 // bylines: other signatures of the same person in the newspaper (NickRules.writers).
 // aka: aliases never used as a signature («Т.Т.» for ТТ): addressees and mentions still find them.
 // members: who usually wrote under a shared editorial signature (NickRules.members), as profile names.
-export type SiteProfile = { key: string; name: string; spellings: string[]; messages: number; first: string; last: string; articles: SiteArticle[]; bylines?: string[]; aka?: string[]; members?: string[]; staff?: true };
+// mentions: when set, the only messages mentioning the profile (NickRules.mentions): «Натуська» is
+// also every other Наташа, so names in texts and addressees would mostly find someone else.
+export type SiteProfile = { key: string; name: string; spellings: string[]; messages: number; first: string; last: string; articles: SiteArticle[]; bylines?: string[]; aka?: string[]; members?: string[]; mentions?: string[]; staff?: true };
 // dates: issue key («2000-01-0066») → its date. spreads: issue key → its sheets scanned as two-page
 // spreads (as the reader detects them), so a link can name the printed page and not the sheet.
 // featured: profile names shown as search examples (scripts/pager-site.mjs picks them).
@@ -110,6 +112,7 @@ export function buildPagerSite(all: PublicPagerMessage[], rules: NickRules, auth
   // Bylines in the newspaper of a pager nick (rules.writers): «ПТ» signed articles «Павел ТРУТНЕВ».
   const writers = new Map(Object.entries(rules.writers ?? {}).map(([nick, names]) => [nickKey(nick, rules), names]));
   const memberLists = new Map(Object.entries(rules.members ?? {}).map(([nick, names]) => [nickKey(nick, rules), names]));
+  const mentionLists = new Map(Object.entries(rules.mentions ?? {}).map(([nick, ids]) => [nickKey(nick, rules), ids]));
   const profiles: SiteProfile[] = nicks.map((nick) => {
     const bylines = writers.get(nick.key) ?? [];
     const members = memberLists.get(nick.key) ?? [];
@@ -140,6 +143,7 @@ export function buildPagerSite(all: PublicPagerMessage[], rules: NickRules, auth
       articles,
       ...(bylines.length ? { bylines } : {}),
       ...(members.length ? { members } : {}),
+      ...(mentionLists.has(nick.key) ? { mentions: mentionLists.get(nick.key) } : {}),
       ...(aka.length ? { aka } : {}),
       ...(staff.has(nick.key) ? { staff: true as const } : {}),
     };

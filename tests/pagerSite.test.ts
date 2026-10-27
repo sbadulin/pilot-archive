@@ -323,6 +323,17 @@ test('an alias of a whole signature keeps its tail and leaves the short core alo
   assert.ok(built.profiles.some((profile) => profile.name === 'Old'), 'another «Old» stays apart');
 });
 
+test('a nick shared by many by name is mentioned and addressed only where listed', () => {
+  const own = at(1, 'Натуська (Нати)', [], 'Бука, прости!');
+  const hers = at(2, 'Бука', ['Натуська'], 'Натуська! Напиши ещё раз.');
+  const other = at(3, 'Likcy', ['Натуська'], 'Привет Натуське!');
+  const built = preparePager(buildPagerSite([own, hers, other], { ...rules, nicks: ['Натуська'], mentions: { Натуська: [hers.id] } }, authors).site);
+  const key = profileOf(built, 'Натуська')!;
+  assert.deepEqual(mentionsOf(built, key).map((message) => message.id), [hers.id]);
+  assert.deepEqual(built.messages.find((message) => message.id === other.id)!.toKeys, [null], 'another Натуська is not linked');
+  assert.deepEqual(dialogsOf(built, key).map((dialog) => dialog.other), [profileOf(built, 'Бука')].filter(Boolean));
+});
+
 test('the editorial signature is a profile and names who usually wrote under it', () => {
   const messages = [at(1, 'ПИЛОТЫ', [], 'Ждём писем!'), at(2, 'Пьяные ПИЛОТЫ', [], 'Ик.'), at(3, 'Леся Лу', [], 'Привет!')];
   const built = buildPagerSite(messages, { ...rules, staff: ['Пилоты'], aliases: { 'Пьяные ПИЛОТЫ': 'Пилоты' }, members: { Пилоты: ['Леся Лу'] } }, authors).site;
