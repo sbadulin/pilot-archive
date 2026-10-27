@@ -150,7 +150,8 @@ export function excerptFor(model: PagerModel, message: FeedMessage, key: string)
   const start = Math.min(...starts);
   const others = message.to.filter((_, i) => message.toKeys[i] !== key);
   const end = Math.min(message.text.length, ...others.map((name) => findName(message.text, name)).filter((at) => at > start));
-  const part = message.text.slice(start, end).trim();
+  // A «P.S.» that opens the next greeting belongs to it, not to the end of this part.
+  const part = message.text.slice(start, end).replace(/\s*(?:P\.?\s*S\.?|П\.?\s*С\.?)\s*$/iu, '').trim();
   return part && part !== message.text.trim() ? part : null;
 }
 
