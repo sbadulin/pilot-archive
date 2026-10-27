@@ -145,6 +145,72 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(rows[day]['selections'], 1)
         self.assertEqual(rows[day]['empty_queries']['nobody'], 1)
 
+    def test_pager_events_are_counted_and_validated(self):
+        day = date(2026, 10, 15)
+        rows = {day: report.blank_day()}
+        for uri in ('/_stats/pager?event=open', '/_stats/pager?event=open',
+                    '/_stats/pager?event=profile&nick=%D0%9A%D0%BE%D1%82',
+                    '/_stats/pager?event=profile&nick=%D0%BA%D0%BE%D1%82',
+                    '/_stats/pager?event=dialog&nick=Cat&with=Dog',
+                    '/_stats/pager?event=search&q=ab&found=0',
+                    '/_stats/pager?event=search&q=abc&found=1',
+                    '/_stats/pager?event=select&q=Dog&kind=to'):
+            report.add_record(rows, record(uri, status=204))
+        other = record('/_stats/pager?event=open', status=204)
+        other['request']['remote_ip'] = '192.0.2.2'
+        report.add_record(rows, other)
+        report.add_record(rows, record('/_stats/pager?event=open', status=404))
+        for uri in ('/_stats/pager?event=search&q=a&found=1',
+                    '/_stats/pager?event=search&q=ab',
+                    '/_stats/pager?event=search&q=' + 'x' * 121 + '&found=1',
+                    '/_stats/pager?event=profile&nick=%07bad',
+                    '/_stats/pager?event=dialog&nick=Cat',
+                    '/_stats/pager?event=select&q=Dog&kind=name',
+                    '/_stats/pager?event=unknown'):
+            report.add_record(rows, record(uri, status=204))
+        bot = record('/_stats/pager?event=open', status=204)
+        bot['request']['headers']['User-Agent'] = ['Googlebot']
+        report.add_record(rows, bot)
+        row = report.finish_day(rows[day])
+        self.assertEqual(row['pager_openers'], 2)
+        self.assertEqual(row['pager_opens'], 3)
+        self.assertEqual(row['pager_profiles'], 2)
+        self.assertEqual(row['pager_profile_nicks']['кот'], 2)
+        self.assertEqual(row['pager_dialogs'], 1)
+        self.assertEqual(row['pager_searches'], 2)
+        self.assertEqual(row['pager_no_results'], 1)
+        self.assertEqual(row['pager_empty_queries'], {'ab': 1})
+        self.assertEqual(row['pager_selections'], 1)
+        self.assertEqual(row['pager_selected'], {'dog': 1})
+        self.assertEqual(row['searches'], 0)
+        self.assertEqual(row['views'], 0)
+        self.assertEqual(row['visitors'], 0)
+
+    def test_pager_block_rendered_only_with_activity_and_old_state_is_compatible(self):
+        day, next_day = date(2026, 10, 15), date(2026, 10, 16)
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            # A snapshot saved before the pager fields existed.
+            old = {key: value for key, value in report.finish_day(report.blank_day()).items()
+                   if not key.startswith('pager_')}
+            old.update(visitors=1, views=3, complete=True)
+            report.atomic_json(state / f'days/{day}.json', old)
+            plain = report.render('day', day, next_day, state)
+            self.assertIn('Открытия сайта: 3', plain)
+            self.assertNotIn('Пейджер', plain)
+            row = report.finish_day(report.blank_day())
+            row.update(complete=True, pager_openers=1, pager_opens=2, pager_profiles=1,
+                       pager_profile_nicks={'кот': 1}, pager_searches=1, pager_queries={'ёж': 1})
+            report.atomic_json(state / f'days/{next_day}.json', row)
+            message = report.render('day', next_day, date(2026, 10, 17), state)
+            self.assertIn('Пейджер', message)
+            self.assertIn('Открыли раздел: 1 посетителей, 2 раз', message)
+            self.assertIn('• кот — 1', message)
+            self.assertIn('• ёж — 1', message)
+            week = report.render('week', date(2026, 10, 12), date(2026, 10, 19), state)
+            self.assertIn('Открытия раздела: 2; посетителей в день, в среднем: 0.5', week)
+            self.assertIn('Просмотры профилей: 1', week)
+
     def test_issue_rankings_and_zero_report_suppression(self):
         day = date(2026, 10, 15)
         rows = {day: report.blank_day()}
