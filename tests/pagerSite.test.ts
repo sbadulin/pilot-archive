@@ -136,11 +136,17 @@ test('routes parse and format', () => {
   assert.deepEqual(parsePagerRoute('#pager/Kurt%D0%BE%D1%87%D0%BA%40/dialogs/BAD'), { nick: 'Kurtочк@', tab: 'dialogs', with: 'BAD' });
   assert.deepEqual(parsePagerRoute('#pager/BAD/nonsense'), { nick: 'BAD', tab: 'own', with: null });
   assert.deepEqual(parsePagerRoute('#pager/%E0%A4%A'), { nick: null, tab: 'own', with: null });
-  for (const hash of ['#pager', '#pager/BAD', '#pager/BAD/articles', '#pager/Kurt%D0%BE%D1%87%D0%BA%40/dialogs/Bad%20Girl']) {
+  for (const hash of ['#pager', '#pager/BAD', '#pager/BAD/articles', '#pager/Kurtочк@/dialogs/Bad%20Girl', '#pager/Спорти/dialogs/ICEPAC']) {
     const route = parsePagerRoute(hash)!;
     assert.equal(pagerHash(route.nick, route.tab, route.with), hash);
   }
+  // Links stay readable: Cyrillic and @ as they are, only what breaks a link is encoded.
+  assert.equal(pagerHash('Спорти'), '#pager/Спорти');
   assert.equal(pagerHash('A/B'), '#pager/A%2FB');
+  assert.equal(pagerHash('50%#?'), '#pager/50%25%23%3F');
+  // Old encoded links still open.
+  assert.deepEqual(parsePagerRoute('#pager/%D0%A1%D0%BF%D0%BE%D1%80%D1%82%D0%B8'), { nick: 'Спорти', tab: 'own', with: null });
+  assert.deepEqual(parsePagerRoute('#pager/Спорти'), { nick: 'Спорти', tab: 'own', with: null });
 });
 
 test('search: nicks open profiles, addressees filter, real names are not searchable', () => {
