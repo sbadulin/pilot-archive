@@ -158,7 +158,8 @@ test('scanner stems close whole words; closed words are closed in signatures too
 test('nick classes: first names, generic words, real names, editorial and creative nicks', () => {
   for (const name of ['Лена', 'Катя', 'Иринка', 'Ленчик', 'Юля Н', 'Танюха', 'Vitaly']) assert.equal(classifyNick(name), 'firstName', name);
   for (const name of ['Я', 'Мы', 'Незнакомка', 'Твоя Лолита', 'Твой Медвежонок', 'Девушка с характером', 'Те, кого вы не знаете']) assert.equal(classifyNick(name), 'generic', name);
-  for (const name of ['ПИЛОТЫ', 'ТТ', 'ПТ']) assert.equal(classifyNick(name), 'editorial', name);
+  for (const name of ['ПИЛОТЫ', 'Редакция']) assert.equal(classifyNick(name), 'editorial', name);
+  for (const name of ['ТТ', 'ПТ']) assert.equal(classifyNick(name), 'unique', `${name} wrote under a nick`);
   assert.equal(classifyNick('Настя Никонова'), 'realName');
   assert.equal(classifyNick('Лена, Марина и Лена'), 'group');
   for (const name of ['BAD', 'П@нд@', 'Lexx', 'WerWolf', 'Маузер', 'Безобидная Маньячка', 'Lee-der, г. Амурск', 'Чернокнижник']) assert.equal(classifyNick(name), 'unique', name);

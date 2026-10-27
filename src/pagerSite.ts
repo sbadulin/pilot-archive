@@ -22,7 +22,8 @@ export type PublicPagerMessage = {
 // The issue and the sheet are read from the id (messageWhere), the date from the issue (PagerSite.dates).
 export type SiteMessage = { id: string; from?: string; to?: string[]; text: string; nicks?: string[] };
 export type SiteArticle = { issue: string; page: number; kind: string; title: string | null };
-export type SiteProfile = { key: string; name: string; spellings: string[]; messages: number; first: string; last: string; articles: SiteArticle[] };
+// staff: one of the editorial (NickRules.staff); only they have remarks on readers' messages.
+export type SiteProfile = { key: string; name: string; spellings: string[]; messages: number; first: string; last: string; articles: SiteArticle[]; staff?: true };
 // dates: issue key («2000-01-0066») → its date. spreads: issue key → its sheets scanned as two-page
 // spreads (as the reader detects them), so a link can name the printed page and not the sheet.
 // featured: profile names shown as search examples (scripts/pager-site.mjs picks them).
@@ -97,6 +98,7 @@ export function buildPagerSite(all: PublicPagerMessage[], rules: NickRules, auth
   // Profiles count only what is shown, so a held message adds no spelling and no date.
   const nicks = buildNicks(shown, rules).filter((nick) => nick.unique);
   const unique = new Set(nicks.map((nick) => nick.key));
+  const staff = new Set((rules.staff ?? []).map((name) => nickKey(name, rules)));
 
   const byKey = new Map<string, SiteArticle[]>();
   for (const entry of authors.names) {
@@ -123,6 +125,7 @@ export function buildPagerSite(all: PublicPagerMessage[], rules: NickRules, auth
       first: nick.first,
       last: nick.last,
       articles,
+      ...(staff.has(nick.key) ? { staff: true as const } : {}),
     };
   });
 
