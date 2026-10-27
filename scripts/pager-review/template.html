@@ -1,0 +1,233 @@
+<title>Ники пейджера</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@500;700;800&family=Roboto:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column of group cards under a sticky progress bar. */
+:root {
+  --paper: #f5f4ee; --ink: #171814; --muted: #63665e; --line: #cecec3; --card: #ffffff; --accent: #e5ef72; --same: #2f6b3a; --diff: #8a2f24;
+  --display: 'Roboto Condensed', 'Arial Narrow', sans-serif; --body: 'Roboto', Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --paper: #161712; --ink: #ecebe2; --muted: #a3a698; --line: #3a3c33; --card: #1f201a; --accent: #6b7316; --same: #8fd19b; --diff: #f0a093; color-scheme: dark } }
+:root[data-theme="dark"] { --paper: #161712; --ink: #ecebe2; --muted: #a3a698; --line: #3a3c33; --card: #1f201a; --accent: #6b7316; --same: #8fd19b; --diff: #f0a093; color-scheme: dark }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.5 var(--body); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--paper); }
+.wrap { max-width: 860px; margin: 0 auto; padding-block: 24px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 20px; }
+h1 { margin: 0; font: 800 clamp(34px, 6vw, 52px)/1 var(--display); letter-spacing: -1px; text-wrap: balance; }
+.lead { margin: 0; color: var(--muted); max-width: 62ch; }
+.label { display: inline-block; justify-self: start; padding: 4px 9px; background: var(--ink); color: var(--paper); font: 700 13px var(--display); letter-spacing: .04em; text-transform: uppercase; }
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 0; background: var(--paper); border-bottom: 3px solid var(--ink); }
+.progress { font: 700 18px var(--display); font-variant-numeric: tabular-nums; }
+.tabs { display: flex; border: 1px solid var(--ink); margin-left: auto; }
+.tabs button { border: 0; border-right: 1px solid var(--ink); background: transparent; color: var(--ink); padding: 6px 12px; font: 500 14px var(--body); cursor: pointer; }
+.tabs button:last-child { border-right: 0; }
+.tabs button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.notice { margin: 0; padding: 10px 14px; border: 1px solid var(--ink); background: var(--accent); color: var(--ink); }
+.list { display: grid; gap: 16px; }
+.group { display: grid; gap: 12px; padding: 16px; background: var(--card); border: 1px solid var(--ink); border-bottom-width: 4px; }
+.group[data-verdict="merge"] { border-color: var(--same); }
+.group[data-verdict="distinct"] { border-color: var(--diff); }
+.ghead { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
+.ghead h2 { margin: 0; font: 700 22px var(--display); overflow-wrap: anywhere; min-width: 0; }
+.reason { font-size: 13px; color: var(--muted); }
+.status { margin-left: auto; font: 700 13px var(--display); text-transform: uppercase; letter-spacing: .04em; }
+.status.merge { color: var(--same); } .status.distinct { color: var(--diff); } .status.unsure, .status.open { color: var(--muted); }
+.names { display: grid; border-top: 1px solid var(--line); }
+.name { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 4px 12px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.name input { width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--ink); }
+.name .main { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.who { min-width: 0; display: grid; gap: 2px; }
+.who b { font: 700 17px var(--display); overflow-wrap: anywhere; }
+.meta { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ex { margin: 2px 0 0; font-size: 14px; overflow-wrap: anywhere; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.actions button { padding: 9px 14px; border: 1px solid var(--ink); background: transparent; color: var(--ink); font: 500 14px var(--body); cursor: pointer; }
+.actions button:hover:not(:disabled) { background: var(--ink); color: var(--paper); }
+.actions button.primary { background: var(--ink); color: var(--paper); }
+.actions button:disabled { opacity: .4; cursor: not-allowed; }
+.hint { margin: 0; font-size: 13px; color: var(--muted); }
+.advice { display: grid; gap: 6px; padding: 10px 12px; border-left: 4px solid var(--ink); background: var(--paper); }
+.advice b { font: 700 14px var(--display); text-transform: uppercase; letter-spacing: .03em; }
+.advice p { margin: 0; font-size: 14px; }
+.advice button { justify-self: start; padding: 6px 12px; border: 1px solid var(--ink); background: transparent; color: var(--ink); font: 500 13px var(--body); cursor: pointer; }
+.advice button:hover { background: var(--ink); color: var(--paper); }
+:focus-visible { outline: 3px solid var(--same); outline-offset: 3px; }
+@media (max-width: 520px) { .tabs { margin-left: 0; } .name { grid-template-columns: auto minmax(0, 1fr); } .who { grid-column: 1 / -1; } }
+</style>
+
+<div class="wrap">
+  <span class="label">Пейджер · ники</span>
+  <h1>Один человек или разные?</h1>
+  <p class="lead">Похожие подписи из рубрики «Пейджер». Отметьте подписи одного человека и выберите главный ник: под ним будет профиль. Без вашего решения ничего не склеивается. Примеры сообщений взяты из цензурированного текста.</p>
+  <div class="bar">
+    <span class="progress" id="progress">Решено 0 из 0</span>
+    <div class="tabs" role="group" aria-label="Показать">
+      <button type="button" data-filter="open" aria-pressed="true">Нерешённые</button>
+      <button type="button" data-filter="done" aria-pressed="false">Решённые</button>
+      <button type="button" data-filter="all" aria-pressed="false">Все</button>
+    </div>
+  </div>
+  <p class="notice" id="notice" hidden></p>
+  <div id="list" class="list"></div>
+</div>
+
+<script id="candidates" type="application/json">__DATA__</script>
+<script>
+const GROUPS = JSON.parse(document.getElementById('candidates').textContent);
+const decisions = new Map(); // group id -> stored decision
+const drafts = new Map();    // group id -> {members:Set, main}
+let filter = 'open';
+let db = null;
+
+const fmtDate = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+const plural = (n, one, few, many) => { const a = n % 10, b = n % 100; return a === 1 && b !== 11 ? one : a >= 2 && a <= 4 && (b < 12 || b > 14) ? few : many; };
+const byMessages = (g) => [...g.members].sort((a, b) => b.messages - a.messages)[0].name;
+const STATUS = { merge: 'Один человек', distinct: 'Разные', unsure: 'Не знаю', open: 'Не решено' };
+// A group whose number changed after a rebuild still finds its answer by the set of signatures.
+const namesKey = (names) => [...names].map((n) => n.toLowerCase()).sort().join('|');
+const byNames = new Map();
+const decisionOf = (g) => decisions.get(g.id) ?? byNames.get(namesKey(g.members.map((m) => m.name)));
+
+function draftOf(g) {
+  if (!drafts.has(g.id)) {
+    const saved = decisionOf(g);
+    drafts.set(g.id, saved && saved.verdict === 'merge'
+      ? { members: new Set(saved.members), main: saved.main }
+      : { members: new Set(g.members.map((m) => m.name)), main: byMessages(g) });
+  }
+  return drafts.get(g.id);
+}
+
+function render() {
+  const done = GROUPS.filter((g) => decisionOf(g) && decisionOf(g).verdict !== 'unsure').length;
+  document.getElementById('progress').textContent = `Решено ${done} из ${GROUPS.length}`;
+  const shown = GROUPS.filter((g) => {
+    const v = decisionOf(g)?.verdict;
+    return filter === 'all' || (filter === 'done' ? v && v !== 'unsure' : !v || v === 'unsure');
+  });
+  const list = document.getElementById('list');
+  list.replaceChildren(...shown.map(card));
+  if (!shown.length) {
+    const p = document.createElement('p');
+    p.className = 'hint';
+    p.textContent = filter === 'open' ? 'Все группы решены.' : 'Пока нет решённых групп.';
+    list.append(p);
+  }
+}
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text != null) node.textContent = text;
+  return node;
+}
+
+function card(g) {
+  const saved = decisionOf(g);
+  const verdict = saved?.verdict ?? 'open';
+  const draft = draftOf(g);
+  const section = el('section', 'group');
+  section.dataset.verdict = verdict;
+  const head = el('div', 'ghead');
+  head.append(
+    el('h2', null, g.members.map((m) => m.name).join(' / ')),
+    el('span', 'reason', g.reasons.join('; ')),
+    el('span', 'status ' + verdict, verdict === 'merge' ? `${STATUS.merge}: ${saved.main}` : STATUS[verdict]),
+  );
+  const names = el('div', 'names');
+  g.members.forEach((m, i) => {
+    const row = el('div', 'name');
+    const box = el('input');
+    box.type = 'checkbox';
+    box.id = `${g.id}-in-${i}`;
+    box.checked = draft.members.has(m.name);
+    box.setAttribute('aria-label', `${m.name}: подпись этого человека`);
+    box.addEventListener('change', () => {
+      if (box.checked) draft.members.add(m.name); else draft.members.delete(m.name);
+      if (!draft.members.has(draft.main)) draft.main = [...draft.members][0] ?? draft.main;
+      render();
+    });
+    const mainLabel = el('label', 'main');
+    const radio = el('input');
+    radio.type = 'radio';
+    radio.name = `${g.id}-main`;
+    radio.id = `${g.id}-main-${i}`;
+    radio.checked = draft.main === m.name;
+    radio.disabled = !draft.members.has(m.name);
+    radio.addEventListener('change', () => { draft.main = m.name; render(); });
+    mainLabel.append(radio, document.createTextNode('главный'));
+    const who = el('div', 'who');
+    const dates = m.first ? ` · ${fmtDate(m.first)}${m.last && m.last !== m.first ? ' — ' + fmtDate(m.last) : ''}` : '';
+    who.append(el('b', null, m.name), el('span', 'meta', `${m.messages} ${plural(m.messages, 'сообщение', 'сообщения', 'сообщений')}${dates}`));
+    if (m.example) who.append(el('p', 'ex', `№ ${m.example.number}: ${m.example.text}`));
+    row.append(box, mainLabel, who);
+    names.append(row);
+  });
+  const actions = el('div', 'actions');
+  const partial = draft.members.size < g.members.length ? ` (${draft.members.size} из ${g.members.length})` : '';
+  const merge = button(`Один человек${partial}`, () => save(g, { verdict: 'merge', members: [...draft.members], main: draft.main }), verdict !== 'merge');
+  merge.disabled = draft.members.size < 2;
+  actions.append(merge, button('Все разные', () => save(g, { verdict: 'distinct' })), button('Не знаю', () => save(g, { verdict: 'unsure' })));
+  const blocks = [head];
+  if (g.hint) blocks.push(advice(g));
+  blocks.push(names, actions, el('p', 'hint', 'Снимите галочку с подписи другого человека и отметьте главный ник.'));
+  section.append(...blocks);
+  return section;
+}
+
+const VERDICT = { same: 'скорее один человек', partial: 'скорее частично один человек', different: 'скорее разные люди', unclear: 'по текстам не понять' };
+const CONFIDENCE = { high: 'уверенно', medium: 'средне', low: 'слабо' };
+function advice(g) {
+  const h = g.hint;
+  const box = el('div', 'advice');
+  const together = (h.together || []).map((set) => set.join(' + ')).join('; ');
+  box.append(el('b', null, `Подсказка по текстам: ${VERDICT[h.verdict]}${h.verdict === 'unclear' ? '' : ` (${CONFIDENCE[h.confidence]})`}`));
+  if (together) box.append(el('p', null, `Вместе: ${together}${h.main ? `; главный — ${h.main}` : ''}`));
+  box.append(el('p', null, h.why));
+  if (h.verdict === 'same' || h.verdict === 'partial') {
+    const set = h.together[0];
+    box.append(button('Принять подсказку', () => save(g, { verdict: 'merge', members: set, main: set.includes(h.main) ? h.main : set[0] })));
+  } else if (h.verdict === 'different') {
+    box.append(button('Принять подсказку', () => save(g, { verdict: 'distinct' })));
+  }
+  return box;
+}
+
+function button(text, onClick, primary = false) {
+  const b = el('button', primary ? 'primary' : null, text);
+  b.type = 'button';
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+async function save(g, decision) {
+  const body = { ...decision, names: g.members.map((m) => m.name), decidedAt: new Date().toISOString() };
+  decisions.set(g.id, body);
+  byNames.set(namesKey(body.names), body);
+  drafts.delete(g.id);
+  render();
+  if (!db) return;
+  try { await db.collection('decisions').doc(g.id).set(body); }
+  catch (e) { showNotice('Решение не сохранилось. Попробуйте ещё раз.'); }
+}
+
+function showNotice(text) { const n = document.getElementById('notice'); n.textContent = text; n.hidden = false; }
+
+document.querySelectorAll('[data-filter]').forEach((b) => b.addEventListener('click', () => {
+  filter = b.dataset.filter;
+  document.querySelectorAll('[data-filter]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  render();
+}));
+
+render();
+(async () => {
+  db = window.claude ? await window.claude.use('db') : null;
+  if (!db) { showNotice('Сохранение недоступно в этом просмотре: отметки останутся только до перезагрузки.'); return; }
+  db.collection('decisions').onSnapshot((snap) => {
+    decisions.clear();
+    byNames.clear();
+    for (const d of snap.docs) if (d.exists) { decisions.set(d.id, d.data()); if (d.data().names) byNames.set(namesKey(d.data().names), d.data()); }
+    render();
+  }, () => showNotice('Связь с хранилищем решений потеряна. Перезагрузите страницу.'));
+})();
+</script>

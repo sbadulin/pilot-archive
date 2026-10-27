@@ -13,3 +13,4 @@ manifest.rebuilt.json
 archive-catalog/authors-index.json
 .dev.vars
 risk-report*.html
+__pycache__/
