@@ -1,7 +1,9 @@
 import { normalizeName } from './authorNames.ts';
 import type { IndexName } from '../functions/api/_lib/authorsIndex.ts';
 
-export const MIN_QUERY = 3;
+// Two letters are enough for nicks like «ПТ» or «ПП»; such a short query must match a whole word.
+export const MIN_QUERY = 2;
+const WHOLE_WORD_BELOW = 3;
 
 // Levenshtein distance capped at 2: enough to tell "one typo" from "different word".
 function withinOneEdit(a: string, b: string) {
@@ -21,13 +23,20 @@ function withinOneEdit(a: string, b: string) {
 const wordMatches = (query: string, word: string) =>
   word.startsWith(query) || (query.length >= 5 && withinOneEdit(query, word.slice(0, Math.max(query.length, word.length))));
 
+// normalizeName folds B, H, T into Cyrillic only as capitals, so «bad» and «BAD» got different keys.
+// Stored keys can't change (D1 credits and the published index use them); fold the rest when comparing.
+const LOWER_LOOKALIKES: Record<string, string> = { b: 'в', h: 'н', t: 'т' };
+const foldCase = (key: string) => key.replace(/[bht]/g, (ch) => LOWER_LOOKALIKES[ch]);
+
 // True when every query word matches some word of one of the name's search keys.
 export function matchesQuery(query: string, keys: string[]): boolean {
-  const words = normalizeName(query).split(' ').filter(Boolean);
-  if (words.join('').length < MIN_QUERY) return false;
+  const words = foldCase(normalizeName(query)).split(' ').filter(Boolean);
+  const letters = words.join('').length;
+  if (letters < MIN_QUERY) return false;
+  const matches = letters < WHOLE_WORD_BELOW ? (q: string, w: string) => q === w : wordMatches;
   return keys.some((key) => {
-    const nameWords = key.split(' ');
-    return words.every((q) => nameWords.some((w) => wordMatches(q, w)));
+    const nameWords = foldCase(key).split(' ');
+    return words.every((q) => nameWords.some((w) => matches(q, w)));
   });
 }
 

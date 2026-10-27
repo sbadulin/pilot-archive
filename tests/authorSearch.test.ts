@@ -14,8 +14,12 @@ const names = [
   entry('Васисуалий ЛОПАТА', 'васисуалий лопата', 3),
 ];
 
-test('fewer than three letters find nothing', () => {
-  assert.deepEqual(searchNames(names, 'ти'), []);
+test('one letter finds nothing; two letters find only a word of exactly those letters', () => {
+  const short = [...names, entry('ПТ', normalizeName('ПТ')), entry('ПП', normalizeName('ПП')), entry('Пт и компания', normalizeName('Пт и компания'))];
+  assert.deepEqual(searchNames(short, 'т'), []);
+  assert.deepEqual(searchNames(short, 'ти'), []);
+  assert.deepEqual(searchNames(short, 'пт').map((n) => n.name).sort(), ['ПТ', 'Пт и компания']);
+  assert.deepEqual(searchNames(short, 'ПП').map((n) => n.name), ['ПП']);
 });
 
 test('a query matches the start of any word, case and ё aside', () => {
@@ -30,6 +34,14 @@ test('every query word must match', () => {
 
 test('Latin nicks are found by how they sound in either alphabet', () => {
   assert.deepEqual(searchNames(names, 'svetka').map((n) => n.name), ['Svetk@']);
+});
+
+test('Latin nicks are found whatever the case of the query or of the name', () => {
+  const nicks = [entry('BAD', normalizeName('BAD')), entry('DJ SASH!', normalizeName('DJ SASH!')), entry('Hot Tina', normalizeName('Hot Tina'))];
+  for (const query of ['bad', 'BAD', 'Bad', 'bAd']) assert.deepEqual(searchNames(nicks, query).map((n) => n.name), ['BAD'], query);
+  assert.deepEqual(searchNames(nicks, 'dj sash').map((n) => n.name), ['DJ SASH!']);
+  assert.deepEqual(searchNames(nicks, 'HOT TINA').map((n) => n.name), ['Hot Tina']);
+  assert.deepEqual(searchNames(nicks, 'hot tina').map((n) => n.name), ['Hot Tina']);
 });
 
 test('one typo is forgiven in words of five letters or more', () => {
