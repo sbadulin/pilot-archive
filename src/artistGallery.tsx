@@ -2,7 +2,7 @@ import {useEffect, useRef, useState} from "react";
 import {ArrowLeft, ArrowRight, X} from "lucide-react";
 import {drawingThumbUrl, graphicsUrl} from "./config";
 import {issueLabel, type Issue} from "./metadata";
-import type {GraphicsSite, SiteDrawing} from "./artistGraphics";
+import type {GraphicsSite, SiteDrawing, SitePrint} from "./artistGraphics";
 
 // The drawings list is small and the same for every artist: fetched once, on the first card that
 // may have drawings. A failure only hides the gallery.
@@ -12,13 +12,28 @@ const loadGraphics = () =>
     .then((response) => (response.ok ? (response.json() as Promise<GraphicsSite>) : null))
     .catch(() => null));
 
-const pageHref = (drawing: SiteDrawing) => `/#issue-${drawing.issue}-p${drawing.page}`;
+const pageHref = (print: SitePrint) => `/#issue-${print.issue}-p${print.page}`;
+// «2 раза», «5 раз», «22 раза».
+const times = (count: number) =>
+  `${count} ${count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20) ? "раза" : "раз"}`;
 
-function Where({drawing, issue}: {drawing: SiteDrawing; issue: Issue}) {
+// Every printing of a drawing, each a link to its page: a reprint is listed, not shown again. Under
+// a thumbnail it is short («№ 02 · стр. 15», the date in the tooltip); in the large view, in full.
+function Prints({prints, issues, full = false, onOpen}: {prints: SitePrint[]; issues: Map<string, Issue>; full?: boolean; onOpen?: () => void}) {
   return (
-    <span className="drawing-where">
-      {issueLabel(issue)} · {issue.dateLabel} · стр. {drawing.page}
-    </span>
+    <ul className="drawing-prints">
+      {prints.map((print) => {
+        const issue = issues.get(print.issue)!;
+        const label = full ? issueLabel(issue) : issueLabel(issue).replace(/\s*\(\d+\)$/, "");
+        return (
+          <li key={`${print.issue}-${print.page}`}>
+            <a href={pageHref(print)} onClick={onOpen} title={full ? undefined : `${issueLabel(issue)} · ${issue.dateLabel}`}>
+              {full ? `${label} · ${issue.dateLabel} · стр. ${print.page}` : `${label} · стр. ${print.page}`}
+            </a>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -38,7 +53,9 @@ export function ArtistGallery({keys, issues}: {keys: string[]; issues: Map<strin
 
   const artist = site?.artists.find((candidate) => keys.includes(candidate.key));
   // Only issues in the catalog can be opened.
-  const drawings = artist?.drawings.filter((drawing) => issues.has(drawing.issue)) ?? [];
+  const drawings: SiteDrawing[] = (artist?.drawings ?? [])
+    .map((drawing) => ({...drawing, prints: drawing.prints.filter((print) => issues.has(print.issue))}))
+    .filter((drawing) => drawing.prints.length > 0);
 
   useEffect(() => {
     const element = dialog.current;
@@ -50,13 +67,14 @@ export function ArtistGallery({keys, issues}: {keys: string[]; issues: Map<strin
   if (!drawings.length) return null;
   const shown = open !== null ? drawings[open] : null;
   const step = (by: number) => setOpen((current) => (current === null ? null : (current + by + drawings.length) % drawings.length));
+  const close = () => setOpen(null);
 
   return (
     <section className="artist-gallery" aria-label="Рисунки">
       <h4>
         Рисунки <span>{drawings.length}</span>
       </h4>
-      <ul>
+      <ul className="drawing-grid">
         {drawings.map((drawing, index) => (
           <li key={drawing.id}>
             <button type="button" className="drawing-card" onClick={() => setOpen(index)}>
@@ -64,8 +82,8 @@ export function ArtistGallery({keys, issues}: {keys: string[]; issues: Map<strin
                 <img src={drawingThumbUrl(drawing.id)} alt={drawing.title} loading="lazy" decoding="async" />
               </span>
               <span className="drawing-title">{drawing.title}</span>
-              <Where drawing={drawing} issue={issues.get(drawing.issue)!} />
             </button>
+            <Prints prints={drawing.prints} issues={issues} />
           </li>
         ))}
       </ul>
@@ -73,8 +91,8 @@ export function ArtistGallery({keys, issues}: {keys: string[]; issues: Map<strin
         ref={dialog}
         className="drawing-view"
         aria-label={shown?.title}
-        onClose={() => setOpen(null)}
-        onClick={(event) => event.target === event.currentTarget && setOpen(null)}
+        onClose={close}
+        onClick={(event) => event.target === event.currentTarget && close()}
         onKeyDown={(event) => {
           if (event.key === "ArrowRight") step(1);
           if (event.key === "ArrowLeft") step(-1);
@@ -82,13 +100,14 @@ export function ArtistGallery({keys, issues}: {keys: string[]; issues: Map<strin
       >
         {shown && (
           <figure>
-            <button type="button" className="drawing-close" onClick={() => setOpen(null)} aria-label="Закрыть">
+            <button type="button" className="drawing-close" onClick={close} aria-label="Закрыть">
               <X size={22} aria-hidden="true" />
             </button>
             <img src={drawingThumbUrl(shown.id)} alt={shown.title} />
             <figcaption>
               <span className="drawing-title">{shown.title}</span>
-              <Where drawing={shown} issue={issues.get(shown.issue)!} />
+              {shown.prints.length > 1 && <span className="drawing-reprinted">Печатался {times(shown.prints.length)}:</span>}
+              <Prints prints={shown.prints} issues={issues} full onOpen={close} />
               <span className="drawing-actions">
                 {drawings.length > 1 && (
                   <>
@@ -103,7 +122,7 @@ export function ArtistGallery({keys, issues}: {keys: string[]; issues: Map<strin
                     </button>
                   </>
                 )}
-                <a className="primary-button" href={pageHref(shown)} onClick={() => setOpen(null)}>
+                <a className="primary-button" href={pageHref(shown.prints[0])} onClick={close}>
                   Открыть страницу газеты
                 </a>
               </span>
