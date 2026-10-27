@@ -26,7 +26,7 @@ const wordMatches = (query: string, word: string) =>
 // normalizeName folds B, H, T into Cyrillic only as capitals, so «bad» and «BAD» got different keys.
 // Stored keys can't change (D1 credits and the published index use them); fold the rest when comparing.
 const LOWER_LOOKALIKES: Record<string, string> = { b: 'в', h: 'н', t: 'т' };
-const foldCase = (key: string) => key.replace(/[bht]/g, (ch) => LOWER_LOOKALIKES[ch]);
+export const foldCase = (key: string) => key.replace(/[bht]/g, (ch) => LOWER_LOOKALIKES[ch]);
 
 // True when every query word matches some word of one of the name's search keys.
 export function matchesQuery(query: string, keys: string[]): boolean {
