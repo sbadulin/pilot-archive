@@ -4,7 +4,8 @@
 // может быть страница на сайте; адресатов (to) не связываем и не собираем вовсе (152-ФЗ).
 import { normalizeName } from './authorNames.ts';
 
-export type NickClass = 'unique' | 'firstName' | 'realName' | 'generic' | 'group' | 'editorial';
+// shared — одна подпись у нескольких читателей («Киса» — пять разных девочек): профиля нет.
+export type NickClass = 'unique' | 'firstName' | 'realName' | 'generic' | 'group' | 'editorial' | 'shared';
 
 // Обычные имена и уменьшительные формы, как их подписывают (нижний регистр, «е» вместо «ё»).
 const NAMES = new Set(
@@ -148,7 +149,8 @@ export type Nick = { key: string; name: string; spellings: string[]; class: Nick
 // Ручные решения (scripts/pager-nick-aliases.json): aliases — подпись → ник (склеить),
 // distinct — группы разных людей, которых не предлагать в кандидаты («Kurt» и «Kurtочк@»).
 // joint — совместная подпись → её авторы («ICEPAC&Liga-X» → ICEPAC и Liga-X): сообщение идёт в каждый профиль.
-export type NickRules = { aliases?: Record<string, string>; distinct?: string[][]; joint?: Record<string, string[]> };
+// shared — подписи, под которыми пишут разные люди: сообщения остаются в ленте, профиля нет.
+export type NickRules = { aliases?: Record<string, string>; distinct?: string[][]; joint?: Record<string, string[]>; shared?: string[] };
 
 const aliasOf = (core: string, rules: NickRules) =>
   Object.entries(rules.aliases ?? {}).find(([spelling]) => normalizeName(spelling) === normalizeName(core))?.[1] ?? null;
@@ -180,10 +182,11 @@ export function buildNicks(messages: NickMessage[], rules: NickRules = {}): Nick
       group.dates.push(message.date);
     }
   }
+  const shared = new Set((rules.shared ?? []).map(name => normalizeName(name)));
   return [...groups.entries()].map(([key, group]) => {
     const spellings = [...group.spellings.entries()].sort((a, b) => b[1] - a[1]).map(([spelling]) => spelling);
     const name = group.target ?? spellings[0];
-    const nickClass = classifyNick(name);
+    const nickClass: NickClass = shared.has(key) ? 'shared' : classifyNick(name);
     const dates = [...group.dates].sort();
     return { key, name, spellings, class: nickClass, unique: nickClass === 'unique', messages: group.ids.length, first: dates[0], last: dates[dates.length - 1], ids: group.ids };
   }).sort((a, b) => b.messages - a.messages || (a.key < b.key ? -1 : 1));

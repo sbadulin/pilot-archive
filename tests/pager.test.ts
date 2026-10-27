@@ -205,6 +205,19 @@ test('a closing formula before the nick is not the nick («С уважением
   assert.equal(nickCore('С уважением'), 'С уважением');
 });
 
+test('a signature shared by several readers gets no profile', () => {
+  const nicks = buildNicks([
+    { id: 'a', date: '2000-03-01', from: 'Киса' },
+    { id: 'b', date: '2000-05-01', from: 'Киса (8А СШ 18)' },
+    { id: 'c', date: '2000-05-01', from: 'Спорти' },
+  ], { shared: ['Киса'] });
+  const kisa = nicks.find(nick => nick.name === 'Киса');
+  assert.equal(kisa?.class, 'shared');
+  assert.equal(kisa?.unique, false);
+  assert.deepEqual(kisa?.ids, ['a', 'b']);
+  assert.equal(nicks.find(nick => nick.name === 'Спорти')?.unique, true);
+});
+
 test('a joint signature counts for each of its authors and makes no nick of its own', () => {
   const rules = { joint: { 'ICEPAC&Liga-X': ['ICEPAC', 'Liga-X'] } };
   const nicks = buildNicks([
