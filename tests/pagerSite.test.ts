@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildPagerSite, messageWhere, type PublicPagerMessage } from '../src/pagerSite.ts';
 import { readableUrl } from '../src/pagerRoute.ts';
+import { withAdjectives } from '../src/pagerNicks.ts';
 import {
   addressedTo,
   articlesOf,
@@ -15,6 +16,7 @@ import {
   parsePagerRoute,
   preparePager,
   profileOf,
+  remarksOf,
   searchPager,
 } from '../src/pagerFeed.ts';
 
@@ -256,4 +258,53 @@ test('a copied link reads as letters, but spaces and escapes stay encoded', () =
   assert.equal(readableUrl(dialog), 'https://pilot-archive.ru/#pager/Dat%20Nigga%20Daz/dialogs/Тори');
   assert.equal(readableUrl('https://pilot-archive.ru/#pager/100%25%20%D0%AF'), 'https://pilot-archive.ru/#pager/100%25%20Я');
   assert.equal(readableUrl('https://x/#%D0'), 'https://x/#%D0', 'a broken sequence is left as is');
+});
+
+test('a nick that holds another one anywhere, or a signature repeated in the text, is not a mention', () => {
+  const pasha = at(1, 'Пашк.A not Bad', ['Killer'], 'Killer – это обезболивающее? Весь Metal и Punk! Пашк.A not Bad.');
+  const about = at(2, 'Soratnik', [], 'Привет Пашк.A not Bad!');
+  const loner = at(3, 'Ну и что, что not Bad', [], 'Я сам по себе. Ну и что, что not Bad');
+  const real = at(4, 'Kurt', [], 'BAD, ты где?');
+  const own = at(5, 'BAD', [], 'Я тут.');
+  // Adjectives before the nick are the same person, signed or named in a text.
+  const sleepy = at(6, 'Сонный BAD', [], 'Всем спать. Сонный BAD.');
+  const named = at(7, 'Kurt', [], 'Привет Сонному... нет, Сонный BAD, привет!');
+  const built = preparePager(buildPagerSite([pasha, about, loner, real, own, sleepy, named], rules, authors).site);
+  const texts = mentionsOf(built, profileOf(built, 'BAD')!).map((message) => message.text);
+  assert.deepEqual(texts.sort(), [real.text, sleepy.text, named.text].sort());
+});
+
+test('a remark in brackets in another message is the profile\'s comment, not a mention', () => {
+  const remark = at(1, 'Наташа Б', [], 'Около Раисполкома (будет политинформация? – ПТ) на крыльце. Приди!');
+  const addressed = at(2, '$aucy Kitten', [], 'Рыженький (ПТ), приветище!!!');
+  const own = at(3, 'ПТ', [], 'Уже начал!');
+  const reader = at(4, 'Svetk@', [], 'Пишу сама.');
+  const quoted = at(5, 'Kurt', [], 'Привет школе (ура! – Svetk@)!');
+  const built = preparePager(buildPagerSite([remark, addressed, own, reader, quoted], { ...rules, staff: ['ПТ'] }, authors).site);
+  const pt = profileOf(built, 'ПТ')!;
+  assert.equal(built.profiles.get(pt)!.staff, true);
+  assert.deepEqual(remarksOf(built, pt).map((message) => message.text), [remark.text]);
+  assert.deepEqual(mentionsOf(built, pt).map((message) => message.text), [addressed.text]);
+  assert.deepEqual(remarksOf(built, profileOf(built, 'Svetk@')!), [], 'only the editorial has remarks');
+  assert.deepEqual(parsePagerRoute('#pager/ПТ/remarks'), { nick: 'ПТ', tab: 'remarks', with: null });
+});
+
+test("a nick's bylines in the newspaper bring their articles", () => {
+  const own = at(1, 'ПТ', [], 'Уже начал!');
+  const index = { names: [{ key: 'павел трутнев', credits: [{ issue: '2000-31-0096', page: 3, kind: 'article', title: 'Кино' }] }] };
+  const built = buildPagerSite([own], { ...rules, writers: { ПТ: ['Павел ТРУТНЕВ'] } }, index).site;
+  const pt = built.profiles.find((profile) => profile.name === 'ПТ')!;
+  assert.deepEqual(pt.bylines, ['Павел ТРУТНЕВ']);
+  assert.deepEqual(pt.articles.map((article) => article.title), ['Кино']);
+});
+
+test('adjectives before a nick describe the same person', () => {
+  assert.ok(withAdjectives('Умиротворенный BAD', 'BAD'));
+  assert.ok(withAdjectives('Мелированный Виталя Мэнсон', 'Виталя Мэнсон'));
+  assert.ok(!withAdjectives('Пашк.A not Bad', 'BAD'));
+  assert.ok(!withAdjectives('BAD', 'BAD'));
+  assert.ok(withAdjectives('Ваша LEXX', 'Lexx'), 'a possessive');
+  assert.ok(withAdjectives('Всегда ваша верная Лёля', 'Лёля'));
+  assert.ok(!withAdjectives('Другой Kurdt', 'Kurdt'), '«другой» is someone else');
+  assert.ok(!withAdjectives('Подруга Kurt', 'Kurt'), 'a relation is someone else');
 });

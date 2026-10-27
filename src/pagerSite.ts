@@ -22,7 +22,9 @@ export type PublicPagerMessage = {
 // The issue and the sheet are read from the id (messageWhere), the date from the issue (PagerSite.dates).
 export type SiteMessage = { id: string; from?: string; to?: string[]; text: string; nicks?: string[] };
 export type SiteArticle = { issue: string; page: number; kind: string; title: string | null };
-export type SiteProfile = { key: string; name: string; spellings: string[]; messages: number; first: string; last: string; articles: SiteArticle[] };
+// staff: one of the editorial (NickRules.staff); only they have remarks on readers' messages.
+// bylines: other signatures of the same person in the newspaper (NickRules.writers).
+export type SiteProfile = { key: string; name: string; spellings: string[]; messages: number; first: string; last: string; articles: SiteArticle[]; bylines?: string[]; staff?: true };
 // dates: issue key («2000-01-0066») → its date. spreads: issue key → its sheets scanned as two-page
 // spreads (as the reader detects them), so a link can name the printed page and not the sheet.
 // featured: profile names shown as search examples (scripts/pager-site.mjs picks them).
@@ -97,13 +99,17 @@ export function buildPagerSite(all: PublicPagerMessage[], rules: NickRules, auth
   // Profiles count only what is shown, so a held message adds no spelling and no date.
   const nicks = buildNicks(shown, rules).filter((nick) => nick.unique);
   const unique = new Set(nicks.map((nick) => nick.key));
+  const staff = new Set((rules.staff ?? []).map((name) => nickKey(name, rules)));
 
   const byKey = new Map<string, SiteArticle[]>();
   for (const entry of authors.names) {
     for (const key of entry.keys ?? [entry.key]) byKey.set(key, [...(byKey.get(key) ?? []), ...entry.credits]);
   }
+  // Bylines in the newspaper of a pager nick (rules.writers): «ПТ» signed articles «Павел ТРУТНЕВ».
+  const writers = new Map(Object.entries(rules.writers ?? {}).map(([nick, names]) => [nickKey(nick, rules), names]));
   const profiles: SiteProfile[] = nicks.map((nick) => {
-    const keys = new Set([nick.key, ...nick.spellings.map((spelling) => normalizeName(spelling))]);
+    const bylines = writers.get(nick.key) ?? [];
+    const keys = new Set([nick.key, ...nick.spellings.map((spelling) => normalizeName(spelling)), ...bylines.map((name) => normalizeName(name))]);
     const seen = new Set<string>();
     const articles = [...keys]
       .flatMap((key) => byKey.get(key) ?? [])
@@ -123,6 +129,8 @@ export function buildPagerSite(all: PublicPagerMessage[], rules: NickRules, auth
       first: nick.first,
       last: nick.last,
       articles,
+      ...(bylines.length ? { bylines } : {}),
+      ...(staff.has(nick.key) ? { staff: true as const } : {}),
     };
   });
 

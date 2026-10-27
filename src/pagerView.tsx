@@ -1,7 +1,7 @@
 // The «Пейджер» section: a feed of readers' pager messages, oldest first, with a profile for
 // every unique nick. Loaded as a separate chunk; pager.json is fetched on the first open.
 import {useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
-import {ArrowLeft, AtSign, Check, FileText, Link, MessageSquare, MessagesSquare, Search, X} from "lucide-react";
+import {ArrowLeft, AtSign, Check, FileText, Link, MessageSquare, MessageSquareQuote, MessagesSquare, Search, X} from "lucide-react";
 import {pagerUrl} from "./config";
 import {issueLabel, isSpecial, type Issue} from "./metadata";
 import {createPagerSearchRecorder, trackPagerDialog, trackPagerOpen, trackPagerProfile} from "./pagerAnalytics";
@@ -14,6 +14,7 @@ import {
   excerptFor,
   issueParts,
   mentionsOf,
+  remarksOf,
   monthLabel,
   pagerHash,
   pagerSearchIndex,
@@ -320,9 +321,12 @@ function Profile({model, profile, route, issues}: {model: PagerModel; profile: S
   const dates = own.map((message) => message.date).sort();
   const first = dates[0] ?? profile.first;
   const last = dates.at(-1) ?? profile.last;
+  const remarks = useMemo(() => remarksOf(model, profile.key), [model, profile.key]);
   const tabs: [PagerTab, string, typeof MessageSquare][] = [
     ["own", "Сообщения", MessageSquare],
     ["about", "Упоминания", AtSign],
+    // Only those who commented on others' messages (ПТ, ТТ) have the tab.
+    ...(remarks.length ? [["remarks", "Комментарии", MessageSquareQuote] as [PagerTab, string, typeof MessageSquare]] : []),
     ["articles", "В газете", FileText],
     ["dialogs", "Диалоги", MessagesSquare],
   ];
@@ -331,15 +335,21 @@ function Profile({model, profile, route, issues}: {model: PagerModel; profile: S
       <a className="pg-back" href="#pager">
         <ArrowLeft size={16} aria-hidden="true" /> К ленте
       </a>
-      <span className="black-label">Профиль</span>
+      <span className="black-label">{profile.staff ? "Профиль · редакция «ПП»" : "Профиль"}</span>
       <div className="pg-title">
         <h1>{profile.name}</h1>
         <CopyLink />
       </div>
       {profile.spellings.length > 0 && <p className="pg-muted">Также подписывался: {profile.spellings.join(", ")}</p>}
+      {profile.bylines && (
+        <p className="pg-muted">
+          В газете: <a href={profileHref(profile, "articles")}>{profile.bylines.join(", ")}</a>
+        </p>
+      )}
       <div className="pg-stats">
         <Stat count={own.length} forms={["сообщение", "сообщения", "сообщений"]} />
         <Stat count={about.length} forms={["упоминание", "упоминания", "упоминаний"]} />
+        {remarks.length > 0 && <Stat count={remarks.length} forms={["комментарий", "комментария", "комментариев"]} />}
         <Stat count={articles.length} forms={["материал", "материала", "материалов"]} />
         {first && <span>{first === last ? dateLabel(first) : `${dateLabel(first)} — ${dateLabel(last)}`}</span>}
       </div>
@@ -371,6 +381,8 @@ function Profile({model, profile, route, issues}: {model: PagerModel; profile: S
           })}
           {!articles.length && <li className="pg-muted">Подписанных этим ником материалов в архиве нет.</li>}
         </ul>
+      ) : route.tab === "remarks" ? (
+        <PostList key={`${profile.key}-remarks`} model={model} messages={remarks} empty="Комментариев к чужим сообщениям нет." />
       ) : route.tab === "about" ? (
         <PostList key={`${profile.key}-about`} model={model} messages={about} empty="Никто не обращался к этому нику и не упоминал его." />
       ) : (

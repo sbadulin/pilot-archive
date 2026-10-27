@@ -54,6 +54,8 @@ const { site, stats } = buildPagerSite(messages, rules, authors, { exclude, spre
 // as nicks («Люблю», «Пока») collecting mentions, so they do not count except to break a tie.
 const model = preparePager(site);
 site.featured = site.profiles
+  // Readers only: the editorial (ПТ, ТТ…) answered everyone.
+  .filter((profile) => !profile.staff)
   .map((profile) => {
     const dialogs = dialogsOf(model, profile.key);
     return { name: profile.name, both: dialogs.filter((dialog) => dialog.mine && dialog.theirs).length, all: dialogs.length };

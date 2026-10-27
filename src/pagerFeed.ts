@@ -3,7 +3,7 @@
 // are shown as printed but never linked, searched or collected (152-ФЗ).
 import { normalizeName } from './authorNames.ts';
 import { foldCase, matchesQuery, MIN_QUERY } from './authorSearch.ts';
-import { classifyNick, nickCore } from './pagerNicks.ts';
+import { classifyNick, nickCore, withAdjectives } from './pagerNicks.ts';
 import { messageWhere, type PagerSite, type SiteMessage, type SiteProfile } from './pagerSite.ts';
 import { printedPages } from './readerLayout.ts';
 
@@ -76,19 +76,37 @@ function namePattern(name: string): RegExp {
   return new RegExp(`(?:^|[^\\p{L}\\p{N}])${body}${after}`, 'u');
 }
 
+// A remark someone added to another reader's message, signed in brackets: «(будет политинформация? –
+// ПТ)». ПТ and ТТ of the editorial often did. A name alone in brackets («Рыженький (ПТ)») is not one.
+const remarkPattern = (names: string[]) =>
+  new RegExp(`\\([^()]*?[–—-]+\\s*(?:${names.map((name) => escapeRegExp(name.trim())).join('|')})\\s*\\)`, 'giu');
+const profileNames = (profile: SiteProfile) => [...new Set([profile.name, ...profile.spellings].filter((name) => name.trim()))];
+
+/** Messages of other readers with a remark by the profile, oldest first; only the editorial made them. */
+export function remarksOf(model: PagerModel, key: string): FeedMessage[] {
+  const profile = model.profiles.get(key);
+  if (!profile?.staff) return [];
+  const pattern = remarkPattern(profileNames(profile));
+  return model.messages.filter((message) => !message.nicks.includes(key) && message.text.search(pattern) >= 0);
+}
+
 /**
  * Messages addressed to the profile or naming it in the text, except its own. Longer nicks that
- * start with one of its names («Bad Girl» for «BAD») are cut out of the text first.
+ * hold one of its names («Bad Girl», «Пашк.A not Bad» for «BAD») and the message's own signature,
+ * often repeated at the end of the text, are cut out of the text first. Only adjectives before the
+ * name («Умиротворенный BAD», «Мелированный Виталя Мэнсон») is the same person: it stays. The
+ * profile's own remarks in other messages («(…– ПТ)») are its words, not a mention.
  */
 export function mentionsOf(model: PagerModel, key: string): FeedMessage[] {
   const profile = model.profiles.get(key);
   if (!profile) return [];
-  const names = [...new Set([profile.name, ...profile.spellings].filter((name) => name.trim()))];
+  const names = profileNames(profile);
+  const remarks = remarkPattern(names);
   const lower = names.map((name) => name.toLocaleLowerCase('ru'));
   const longer = model.names
     .filter((other) => {
       const value = other.toLocaleLowerCase('ru');
-      return !lower.includes(value) && lower.some((name) => value.startsWith(name));
+      return !lower.includes(value) && lower.some((name) => value.includes(name)) && !names.some((name) => withAdjectives(other, name));
     })
     .sort((a, b) => b.length - a.length)
     .map((other) => new RegExp(escapeRegExp(other), 'giu'));
@@ -96,7 +114,10 @@ export function mentionsOf(model: PagerModel, key: string): FeedMessage[] {
   return model.messages.filter((message) => {
     if (message.nicks.includes(key)) return false;
     if (message.toKeys.includes(key)) return true;
-    const text = longer.reduce((acc, pattern) => acc.replace(pattern, ' '), message.text);
+    const from = message.from?.trim() ?? '';
+    const described = names.some((name) => withAdjectives(nickCore(from), name));
+    const signature = from && !described ? [new RegExp(escapeRegExp(from), 'giu')] : [];
+    const text = [remarks, ...signature, ...longer].reduce((acc, pattern) => acc.replace(pattern, ' '), message.text);
     return patterns.some((pattern) => pattern.test(text));
   });
 }

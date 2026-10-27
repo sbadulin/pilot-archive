@@ -2,8 +2,8 @@
 // #pager/<nick>/dialogs/<other>. Kept apart from pagerFeed.ts because the app shell needs only
 // these; the rest of the section is a lazily loaded chunk.
 
-export type PagerTab = 'own' | 'about' | 'articles' | 'dialogs';
-export const PAGER_TABS: PagerTab[] = ['own', 'about', 'articles', 'dialogs'];
+export type PagerTab = 'own' | 'about' | 'remarks' | 'articles' | 'dialogs';
+export const PAGER_TABS: PagerTab[] = ['own', 'about', 'remarks', 'articles', 'dialogs'];
 export type PagerRoute = { nick: string | null; tab: PagerTab; with: string | null };
 
 const decode = (part: string | undefined) => {

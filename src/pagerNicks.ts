@@ -88,7 +88,8 @@ girl boy baby kiss kitty angel friend dj
 );
 
 // Подписи самой редакции: не читатели.
-const EDITORIAL = new Set(['пилоты', 'пилот', 'пп', 'тт', 'пт', 'п т', 'редакция', 'редактор', 'наборщик', 'почтальон п', 'ваши пилоты', 'ваши братья пилоты', 'братья пилоты']);
+// ПТ and ТТ wrote in the pager under their nicks and answered readers: people, not the editorial.
+const EDITORIAL = new Set(['пилоты', 'пилот', 'пп', 'редакция', 'редактор', 'наборщик', 'почтальон п', 'ваши пилоты', 'ваши братья пилоты', 'братья пилоты']);
 
 const SURNAME = /(?:ов|ев|ёв|ин|ын|ова|ева|ёва|ина|ына|ский|ская|цкий|цкая|енко|ко|ук|юк|ич|ых|их|ян|дзе|швили)$/u;
 
@@ -150,7 +151,9 @@ export type Nick = { key: string; name: string; spellings: string[]; class: Nick
 // distinct — группы разных людей, которых не предлагать в кандидаты («Kurt» и «Kurtочк@»).
 // joint — совместная подпись → её авторы («ICEPAC&Liga-X» → ICEPAC и Liga-X): сообщение идёт в каждый профиль.
 // shared — подписи, под которыми пишут разные люди: сообщения остаются в ленте, профиля нет.
-export type NickRules = { aliases?: Record<string, string>; distinct?: string[][]; joint?: Record<string, string[]>; shared?: string[] };
+// staff: nicks of the editorial who wrote in the pager and commented on readers' messages.
+// writers: nick → the same person's bylines in the newspaper, for «В газете».
+export type NickRules = { aliases?: Record<string, string>; distinct?: string[][]; joint?: Record<string, string[]>; shared?: string[]; staff?: string[]; writers?: Record<string, string[]> };
 
 const aliasOf = (core: string, rules: NickRules) =>
   Object.entries(rules.aliases ?? {}).find(([spelling]) => normalizeName(spelling) === normalizeName(core))?.[1] ?? null;
@@ -192,7 +195,11 @@ export function buildNicks(messages: NickMessage[], rules: NickRules = {}): Nick
   return [...groups.entries()].map(([key, group]) => {
     const spellings = [...group.spellings.entries()].sort((a, b) => b[1] - a[1]).map(([spelling]) => spelling);
     const name = group.target ?? spellings[0];
-    const nickClass: NickClass = shared.has(key) ? 'shared' : classifyNick(name);
+    // A manual alias may name the profile by a short form that alone reads as a first name and
+    // initial («Пашк.A not Bad» → «Пашк.A»): then one unique spelling makes it a nick.
+    const named = classifyNick(name);
+    const aliased = group.target !== null && named === 'firstName' && spellings.some((spelling) => classifyNick(spelling) === 'unique');
+    const nickClass: NickClass = shared.has(key) ? 'shared' : aliased ? 'unique' : named;
     const dates = [...group.dates].sort();
     return { key, name, spellings, class: nickClass, unique: nickClass === 'unique', messages: group.ids.length, first: dates[0], last: dates[dates.length - 1], ids: group.ids };
   }).sort((a, b) => b.messages - a.messages || (a.key < b.key ? -1 : 1));
@@ -206,7 +213,21 @@ export function adjectiveTarget(core: string): string | null {
   return isAllCaps(last) && words.slice(0, -1).every(isAdjective) ? last : null;
 }
 
-export type ProfileCandidate = { names: string[]; keys: string[]; messages: number; reasons: string[] };
+// «Умиротворенный BAD», «Ваша LEXX», «Всегда ваша верная Лёля»: the same person as the nick, only
+// described — adjectives, possessives and a few adverbs before it. A noun («Подруга Kurt») or
+// «Другой Kurdt» names someone else.
+const DESCRIBING = /^(?:ваш|ваша|ваши|твой|твоя|твои|наш|наша|просто|всегда|вечно|очень|самый|самая)$/iu;
+const OTHER = /^друг(?:ой|ая|ие)$/iu;
+export function withAdjectives(core: string, name: string): boolean {
+  const words = core.trim().split(/\s+/);
+  const tail = name.trim().split(/\s+/);
+  if (words.length <= tail.length) return false;
+  const end = words.slice(-tail.length).join(' ').toLocaleLowerCase('ru');
+  const before = words.slice(0, -tail.length);
+  return end === tail.join(' ').toLocaleLowerCase('ru') && before.every((word) => !OTHER.test(word) && (isAdjective(word) || DESCRIBING.test(word)));
+}
+
+export type ProfileCandidate ={ names: string[]; keys: string[]; messages: number; reasons: string[] };
 
 // Кандидаты в один профиль — для ручного подтверждения, ничего не склеивается:
 // одинаковые без пробелов и знаков («Ice Pac» / «Icepac»), один уникальный ник — начало другого
