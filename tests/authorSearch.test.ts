@@ -14,8 +14,12 @@ const names = [
   entry('Васисуалий ЛОПАТА', 'васисуалий лопата', 3),
 ];
 
-test('fewer than three letters find nothing', () => {
-  assert.deepEqual(searchNames(names, 'ти'), []);
+test('one letter finds nothing; two letters find only a word of exactly those letters', () => {
+  const short = [...names, entry('ПТ', normalizeName('ПТ')), entry('ПП', normalizeName('ПП')), entry('Пт и компания', normalizeName('Пт и компания'))];
+  assert.deepEqual(searchNames(short, 'т'), []);
+  assert.deepEqual(searchNames(short, 'ти'), []);
+  assert.deepEqual(searchNames(short, 'пт').map((n) => n.name).sort(), ['ПТ', 'Пт и компания']);
+  assert.deepEqual(searchNames(short, 'ПП').map((n) => n.name), ['ПП']);
 });
 
 test('a query matches the start of any word, case and ё aside', () => {
