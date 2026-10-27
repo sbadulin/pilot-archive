@@ -133,6 +133,7 @@ test('an alias goes to its nick, a joint signature to every author', () => {
   assert.equal(bad.messages, 2);
   assert.deepEqual(site.messages.find((message) => message.from === 'Умиротворенный BAD')!.nicks, [bad.key]);
   assert.deepEqual(site.messages.find((message) => message.from === 'Kurt & Kurtочк@')!.nicks, [key('Kurt'), key('Kurtочк@')]);
+  assert.deepEqual(site.profiles.find((profile) => profile.name === 'Kurt')!.spellings, [], 'a joint signature is not a spelling');
 });
 
 test('articles come from the authors index by key, without duplicates and pager credits', () => {
