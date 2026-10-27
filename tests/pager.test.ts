@@ -193,6 +193,8 @@ test('similar nicks become profile candidates, not merges; distinct people are l
   assert.ok(!candidates.some(candidate => candidate.names.includes('Kurt')));
   assert.ok(profileCandidates(nicks).some(candidate => candidate.names.includes('Kurt')));
   assert.ok(candidates.some(candidate => candidate.names.includes('Растроганный ПТ') && candidate.names.includes('ПТ')));
+  const separate = profileCandidates(nicks, { distinct: [['ПТ', 'Растроганный ПТ']] });
+  assert.ok(!separate.some(candidate => candidate.names.includes('Растроганный ПТ')), 'a «different people» answer also stops the adjective hint');
 });
 
 test('a closing formula before the nick is not the nick («С уважением О\'К» is O\'K)', () => {

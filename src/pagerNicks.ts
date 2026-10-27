@@ -211,7 +211,7 @@ export function profileCandidates(nicks: Nick[], rules: NickRules = {}): Profile
   nicks.forEach((a, i) => {
     const target = adjectiveTarget(a.name);
     const j = target ? byKey.get(normalizeName(target)) : undefined;
-    if (j !== undefined && j !== i) pairs.push([i, j, 'прилагательное перед ником']);
+    if (j !== undefined && j !== i && allowed(a, nicks[j])) pairs.push([i, j, 'прилагательное перед ником']);
     nicks.forEach((b, k) => {
       if (k <= i || !allowed(a, b)) return;
       const ca = compact(a.key);
