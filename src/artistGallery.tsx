@@ -19,10 +19,13 @@ const times = (count: number) =>
 
 // Every printing of a drawing, each a link to its page: a reprint is listed, not shown again. Under
 // a thumbnail it is short («№ 02 · стр. 15», the date in the tooltip); in the large view, in full.
+// Under a thumbnail a reprinted drawing shows its first printing and «ещё N» for the rest.
 function Prints({prints, issues, full = false, onOpen}: {prints: SitePrint[]; issues: Map<string, Issue>; full?: boolean; onOpen?: () => void}) {
+  const [more, setMore] = useState(false);
+  const listed = full || more ? prints : prints.slice(0, 1);
   return (
     <ul className="drawing-prints">
-      {prints.map((print) => {
+      {listed.map((print) => {
         const issue = issues.get(print.issue)!;
         const label = full ? issueLabel(issue) : issueLabel(issue).replace(/\s*\(\d+\)$/, "");
         return (
@@ -33,6 +36,13 @@ function Prints({prints, issues, full = false, onOpen}: {prints: SitePrint[]; is
           </li>
         );
       })}
+      {!full && prints.length > 1 && (
+        <li>
+          <button type="button" className="drawing-more" aria-expanded={more} onClick={() => setMore(!more)}>
+            {more ? "свернуть" : `ещё ${prints.length - 1}`}
+          </button>
+        </li>
+      )}
     </ul>
   );
 }

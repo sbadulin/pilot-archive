@@ -123,6 +123,8 @@ button, a { transition: background-color .15s, color .15s, border-color .15s; }
 .author-credits .drawing-prints a { display: inline; padding: 0; margin: 0; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
 .author-credits .drawing-prints a:hover, .author-credits .drawing-prints a:focus-visible { color: var(--ink); background: var(--accent); text-decoration-color: currentColor; }
 .drawing-reprinted { margin-top: 2px; color: var(--muted); font-size: 13px; }
+.drawing-more { border: 0; background: none; padding: 0; color: var(--ink); font-size: 12px; font-weight: 500; text-decoration: underline dotted; text-underline-offset: 3px; }
+.drawing-more:hover, .drawing-more:focus-visible { background: var(--accent); outline: 0; }
 .drawing-view { width: min(920px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 0; border: 1px solid var(--ink); background: var(--paper); color: var(--ink); box-shadow: 0 6px 0 var(--ink); overflow: auto; }
 .drawing-view::backdrop { background: rgb(23 24 20 / .72); }
 .drawing-view figure { margin: 0; position: relative; display: grid; }
