@@ -8,6 +8,7 @@ import {createPagerSearchRecorder, trackPagerDialog, trackPagerOpen, trackPagerP
 import {
   MIN_QUERY,
   addressedTo,
+  articlesOf,
   dateLabel,
   dialogsOf,
   issueParts,
@@ -272,9 +273,9 @@ function Profile({model, profile, route, issues}: {model: PagerModel; profile: S
   const own = model.own.get(profile.key) ?? [];
   const about = useMemo(() => mentionsOf(model, profile.key), [model, profile.key]);
   const dialogs = useMemo(() => (route.tab === "dialogs" ? dialogsOf(model, profile.key, about) : []), [model, profile.key, about, route.tab]);
-  // Only issues in the catalog can be opened.
+  // The catalog only adds a date; the articles themselves come from the published authors index.
   const catalog = useMemo(() => new Map(issues.map((issue) => [`${issue.year}-${issue.number}-${issue.serial}`, issue])), [issues]);
-  const articles = profile.articles.filter((article) => catalog.has(article.issue));
+  const articles = articlesOf(model, profile.key);
   const dates = own.map((message) => message.date).sort();
   const first = dates[0] ?? profile.first;
   const last = dates.at(-1) ?? profile.last;
@@ -310,13 +311,14 @@ function Profile({model, profile, route, issues}: {model: PagerModel; profile: S
       ) : route.tab === "articles" ? (
         <ul className="pg-articles">
           {articles.map((article) => {
-            const issue = catalog.get(article.issue)!;
+            const issue = issueParts(article.issue);
+            const dated = catalog.get(article.issue);
             return (
               <li key={`${article.issue}-${article.page}-${article.title ?? ""}`}>
                 <a href={`#issue-${article.issue}-p${article.page}`}>
                   <span className="pg-muted">
                     {issueLabel(issue)}
-                    {isSpecial(issue) ? "" : ` · ${issue.dateLabel}`} · стр. {article.page} · {KIND[article.kind] ?? KIND.other}
+                    {dated && !isSpecial(issue) ? ` · ${dated.dateLabel}` : ""} · стр. {article.page} · {KIND[article.kind] ?? KIND.other}
                   </span>
                   <b>{article.title || "Без заголовка"}</b>
                 </a>

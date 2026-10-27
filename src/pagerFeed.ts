@@ -26,10 +26,12 @@ export function preparePager(site: PagerSite): PagerModel {
   messages.sort((a, b) => a.date.localeCompare(b.date));
   const profiles = new Map(site.profiles.map((profile) => [profile.key, profile]));
   const byName = new Map<string, string>();
-  for (const profile of site.profiles) byName.set(profile.key, profile.key);
+  // Keys are case-folded like the search (normalizeName leaves lowercase b, h, t Latin), so a
+  // typed route «#pager/bad» or an addressee «bad» finds BAD.
+  for (const profile of site.profiles) if (!byName.has(foldCase(profile.key))) byName.set(foldCase(profile.key), profile.key);
   for (const profile of site.profiles) {
     for (const name of [profile.name, ...profile.spellings]) {
-      const key = normalizeName(name);
+      const key = foldCase(normalizeName(name));
       if (key && !byName.has(key)) byName.set(key, profile.key);
     }
   }
@@ -44,8 +46,12 @@ export function preparePager(site: PagerSite): PagerModel {
 
 // The profile a printed name belongs to («Icepac (лэйбл Outlow)» → ICEPAC), or null.
 export function profileOf(model: PagerModel, name: string): string | null {
-  return model.byName.get(normalizeName(nickCore(name))) ?? model.byName.get(normalizeName(name)) ?? null;
+  return model.byName.get(foldCase(normalizeName(nickCore(name)))) ?? model.byName.get(foldCase(normalizeName(name))) ?? null;
 }
+
+// «В газете»: the profile's signed materials, oldest first.
+export const articlesOf = (model: PagerModel, key: string) =>
+  [...(model.profiles.get(key)?.articles ?? [])].sort((a, b) => a.issue.localeCompare(b.issue) || a.page - b.page);
 
 // --- Mentions ---
 

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { buildPagerSite, messageWhere, type PublicPagerMessage } from '../src/pagerSite.ts';
 import {
   addressedTo,
+  articlesOf,
   dialogsOf,
   isSearchableAddressee,
   mentionsOf,
@@ -88,6 +89,13 @@ test('articles come from the authors index by key, without duplicates and pager 
   assert.deepEqual(bad.articles, [{ issue: '2000-02-0062', page: 13, kind: 'article', title: 'ОДИН' }]);
   assert.deepEqual(site.profiles.find((profile) => profile.name === 'Kurt')!.articles, []);
   assert.equal(stats.withArticles, 1);
+});
+
+test("a profile's articles reach the view model, found by its route name", () => {
+  for (const name of ['BAD', 'bad', 'Умиротворенный BAD']) {
+    assert.deepEqual(articlesOf(model, profileOf(model, name)!), [{ issue: '2000-02-0062', page: 13, kind: 'article', title: 'ОДИН' }], name);
+  }
+  assert.deepEqual(articlesOf(model, key('Kurt')), []);
 });
 
 test('issue, sheet and date are read back from the id', () => {
