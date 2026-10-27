@@ -8,3 +8,6 @@ export const authorsIndexUrl = () => window.PILOT_AUTHORS_INDEX_URL || manifestU
 // «Пейджер» section data, published next to the manifest by scripts/pager-publish.mjs.
 declare global { interface Window { PILOT_PAGER_URL?: string } }
 export const pagerUrl = () => window.PILOT_PAGER_URL || manifestUrl().replace(/manifest\.json$/, 'pager.json');
+// Artists' drawings for the author card and their thumbnails, published by scripts/graphics-publish.mjs.
+export const graphicsUrl = () => manifestUrl().replace(/manifest\.json$/, 'graphics.json');
+export const drawingThumbUrl = (id: string) => manifestUrl().replace(/manifest\.json$/, `graphics/${id}.jpg`);

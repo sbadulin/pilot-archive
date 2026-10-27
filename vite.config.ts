@@ -44,11 +44,16 @@ export default defineConfig({
           }
           // Dev only: the «Пейджер» data before it is published (npm run pager:site writes it to the
           // private cache, never into the repository). Falls through to the live site when absent.
-          if (requestPath === '/pager.json') {
-            const cache = resolve(process.env.PILOT_ARCHIVE_ROOT ?? resolve(homedir(), 'Downloads/Reading'), 'pilot-archive-fulltext-cache');
-            const body = await readFile(resolve(cache, 'pager-site.json')).catch(() => null);
+          // The artists' drawings likewise (npm run graphics:site): the list and its thumbnails.
+          const cache = resolve(process.env.PILOT_ARCHIVE_ROOT ?? resolve(homedir(), 'Downloads/Reading'), 'pilot-archive-fulltext-cache');
+          const thumb = requestPath.match(/^\/graphics\/([\w-]+\.jpg)$/);
+          const local = requestPath === '/pager.json' ? ['pager-site.json', 'application/json']
+            : requestPath === '/graphics.json' ? ['graphics-site.json', 'application/json']
+            : thumb ? [`graphics/thumbs/${thumb[1]}`, 'image/jpeg'] : null;
+          if (local) {
+            const body = await readFile(resolve(cache, local[0])).catch(() => null);
             if (body) {
-              res.setHeader('Content-Type', 'application/json');
+              res.setHeader('Content-Type', local[1]);
               res.setHeader('Cache-Control', 'no-cache');
               res.end(body);
               return;
