@@ -347,6 +347,20 @@ function Profile({model, profile, route, issues}: {model: PagerModel; profile: S
           В газете: <a href={profileHref(profile, "articles")}>{profile.bylines.join(", ")}</a>
         </p>
       )}
+      {profile.members && (
+        <p className="pg-muted">
+          Обычно писали:{" "}
+          {profile.members.map((name, i) => {
+            const member = model.profiles.get(profileOf(model, name) ?? "");
+            return (
+              <span key={name}>
+                {i > 0 && ", "}
+                {member ? <ProfileLink profile={member} /> : name}
+              </span>
+            );
+          })}
+        </p>
+      )}
       <div className="pg-stats">
         <Stat count={own.length} forms={["сообщение", "сообщения", "сообщений"]} />
         <Stat count={about.length} forms={["упоминание", "упоминания", "упоминаний"]} />
