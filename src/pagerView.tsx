@@ -16,9 +16,7 @@ import {
   mentionsOf,
   remarksOf,
   monthLabel,
-  pagerHash,
   pagerSearchIndex,
-  parsePagerRoute,
   plural,
   pluralWord,
   preparePager,
@@ -31,7 +29,8 @@ import {
   type PagerRoute,
   type PagerTab,
 } from "./pagerFeed";
-import {readableUrl} from "./pagerRoute";
+import {go, onRoute} from "./navigation";
+import {pagerPath, pagerRouteOf, readableUrl} from "./pagerRoute";
 import type {PagerSite, SiteProfile} from "./pagerSite";
 
 let request: Promise<PagerModel> | null = null;
@@ -48,15 +47,16 @@ function loadPager() {
 
 const EMPTY_ROUTE: PagerRoute = {nick: null, tab: "own", with: null};
 function usePagerRoute() {
-  const [route, setRoute] = useState(() => parsePagerRoute(window.location.hash) ?? EMPTY_ROUTE);
-  useEffect(() => {
-    const update = () => {
-      const next = parsePagerRoute(window.location.hash);
-      if (next) setRoute(next);
-    };
-    window.addEventListener("hashchange", update);
-    return () => window.removeEventListener("hashchange", update);
-  }, []);
+  const here = () => pagerRouteOf(window.location.pathname, window.location.hash);
+  const [route, setRoute] = useState(() => here() ?? EMPTY_ROUTE);
+  useEffect(
+    () =>
+      onRoute(() => {
+        const next = here();
+        if (next) setRoute(next);
+      }),
+    [],
+  );
   return route;
 }
 
@@ -91,9 +91,10 @@ function useChunks(total: number) {
   return {count, more};
 }
 
-const pageHref = (message: FeedMessage) => `#issue-${message.issue}-p${message.page}`;
+// From «/pager/…» an issue is «/#issue-…»: a relative hash would stay under the pager path.
+const pageHref = (message: FeedMessage) => `/#issue-${message.issue}-p${message.page}`;
 const profileHref = (profile: SiteProfile, tab: PagerTab = "own", other?: SiteProfile) =>
-  pagerHash(profile.name, tab, other?.name);
+  pagerPath(profile.name, tab, other?.name);
 
 function Avatar({name}: {name: string | null}) {
   const letters = (name ?? "").replace(/[^\p{L}\p{N}@]/gu, "").slice(0, 2).toUpperCase() || "—";
@@ -332,7 +333,7 @@ function Profile({model, profile, route, issues}: {model: PagerModel; profile: S
   ];
   return (
     <section className="pg-profile" aria-label={`Профиль ${profile.name}`}>
-      <a className="pg-back" href="#pager">
+      <a className="pg-back" href="/pager">
         <ArrowLeft size={16} aria-hidden="true" /> К ленте
       </a>
       <span className="black-label">{profile.staff ? "Профиль · редакция «ПП»" : "Профиль"}</span>
@@ -369,7 +370,7 @@ function Profile({model, profile, route, issues}: {model: PagerModel; profile: S
             const dated = catalog.get(article.issue);
             return (
               <li key={`${article.issue}-${article.page}-${article.title ?? ""}`}>
-                <a href={`#issue-${article.issue}-p${article.page}`}>
+                <a href={`/#issue-${article.issue}-p${article.page}`}>
                   <span className="pg-muted">
                     {issueLabel(issue)}
                     {dated && !isSpecial(issue) ? ` · ${dated.dateLabel}` : ""} · стр. {article.page} · {KIND[article.kind] ?? KIND.other}
@@ -404,7 +405,7 @@ function PagerSearch({model, onAddressee}: {model: PagerModel | null; onAddresse
   const choose = (hit: PagerHit) => {
     recorder.select(hit.name, hit.kind);
     setQuery("");
-    if (hit.kind === "author") window.location.hash = pagerHash(hit.name);
+    if (hit.kind === "author") go(pagerPath(hit.name));
     else onAddressee(hit);
   };
   return (
@@ -456,7 +457,7 @@ function PagerSearch({model, onAddressee}: {model: PagerModel | null; onAddresse
           {model.featured.map((name, i) => (
             <span key={name}>
               {i > 0 && ", "}
-              <a href={pagerHash(name)}>{name}</a>
+              <a href={pagerPath(name)}>{name}</a>
             </span>
           ))}
         </p>
@@ -534,7 +535,7 @@ export default function PagerSection({issues}: {issues: Issue[]}) {
   const chooseAddressee = (hit: PagerHit) => {
     feedScroll.current = 0;
     setAddressee(hit);
-    if (route.nick) window.location.hash = "pager";
+    if (route.nick) go(pagerPath());
     else window.scrollTo(0, 0);
   };
 
@@ -571,7 +572,7 @@ export default function PagerSection({issues}: {issues: Issue[]}) {
         )}
         {model && route.nick && !profile && (
           <div className="pg-profile">
-            <a className="pg-back" href="#pager">
+            <a className="pg-back" href="/pager">
               <ArrowLeft size={16} aria-hidden="true" /> К ленте
             </a>
             <p>У подписи «{route.nick}» нет профиля: профили есть только у отличительных ников.</p>

@@ -19,7 +19,8 @@ pilot-archive.ru {
     }
     header @authorStats Cache-Control "no-store"
     respond @authorStats "" 204
-    @root path /
+    # The «Пейджер» section has real paths («/pager/Спорти»): the same page answers them.
+    @root path / /pager /pager/*
     rewrite @root /index.html
     reverse_proxy https://{$S3_PUBLIC_HOST} {
         header_up Host {$S3_PUBLIC_HOST}

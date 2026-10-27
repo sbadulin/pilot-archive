@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildPagerSite, messageWhere, type PublicPagerMessage } from '../src/pagerSite.ts';
-import { readableUrl } from '../src/pagerRoute.ts';
+import { pagerPath, pagerRouteOf, readableUrl } from '../src/pagerRoute.ts';
 import { withAdjectives } from '../src/pagerNicks.ts';
 import {
   addressedTo,
@@ -197,6 +197,18 @@ test('routes parse and format', () => {
   assert.equal(pagerHash('50%#?'), '#pager/50%25%23%3F');
   // Old encoded links still open.
   assert.deepEqual(parsePagerRoute('#pager/%D0%A1%D0%BF%D0%BE%D1%80%D1%82%D0%B8'), { nick: 'Спорти', tab: 'own', with: null });
+});
+
+test('the section lives at /pager; an old #pager link and a hash link opened from it still work', () => {
+  assert.equal(pagerPath(), '/pager');
+  assert.equal(pagerPath('Спорти', 'dialogs', 'Bad Girl'), '/pager/Спорти/dialogs/Bad%20Girl');
+  // The browser gives the path percent-encoded.
+  assert.deepEqual(pagerRouteOf('/pager/%D0%A1%D0%BF%D0%BE%D1%80%D1%82%D0%B8/about', ''), { nick: 'Спорти', tab: 'about', with: null });
+  assert.deepEqual(pagerRouteOf('/pager/', ''), { nick: null, tab: 'own', with: null });
+  assert.deepEqual(pagerRouteOf('/', '#pager/BAD'), { nick: 'BAD', tab: 'own', with: null });
+  assert.equal(pagerRouteOf('/pager/BAD', '#issue-2000-01-0066-p13'), null, 'an issue opened from the section');
+  assert.equal(pagerRouteOf('/pagers', ''), null);
+  assert.equal(pagerRouteOf('/', ''), null);
   assert.deepEqual(parsePagerRoute('#pager/Спорти'), { nick: 'Спорти', tab: 'own', with: null });
 });
 

@@ -34,7 +34,8 @@ import {Checkbox} from "./checkbox";
 import {AuthorSearch} from "./authorSearchView";
 import {AdultBadge} from "./ageGate";
 import {openPdf} from "./pdf";
-import {isPagerHash} from "./pagerRoute";
+import {go, onRoute, routeLinks} from "./navigation";
+import {isPagerHash, pagerRouteOf} from "./pagerRoute";
 
 // The «Пейджер» section is its own chunk: most visitors read issues and never open it.
 const PagerSection = lazy(() => import("./pagerView"));
@@ -1647,17 +1648,22 @@ export default function Home() {
         next.kind === "reader"
           ? archiveIssues.find((item) => item.id === next.id)
           : undefined;
-      window.location.hash =
+      // From «/pager/…» too: the hash routes live at the root.
+      go(
         next.kind === "reader" && issue
-          ? issueRoute(issue)
+          ? `/${issueRoute(issue)}`
           : next.kind === "upload"
-            ? "add"
-            : "archive";
+            ? "/#add"
+            : "/#archive",
+      );
     },
     [archiveIssues],
   );
   useEffect(() => {
     const update = () => {
+      // An old link «#pager/Спорти» moves to its path «/pager/Спорти».
+      if (isPagerHash(window.location.hash))
+        window.history.replaceState(null, "", `/${window.location.hash.slice(1)}`);
       const hash = window.location.hash;
       const issueMatch = hash.match(
         /^#issue-(\d{4})-(\d{1,3})-(\d{4,5})(?:-p(\d+))?$/,
@@ -1671,7 +1677,7 @@ export default function Home() {
               issue.serial === issueMatch[3].padStart(4, "0"),
           )
         : undefined;
-      if (isPagerHash(hash)) {
+      if (pagerRouteOf(window.location.pathname, hash)) {
         // The section scrolls by itself: Back to the feed returns to the same place in it.
         setScreen((current) => (current.kind === "pager" ? current : {kind: "pager"}));
         return;
@@ -1704,8 +1710,12 @@ export default function Home() {
       else window.scrollTo(0, 0);
     };
     update();
-    window.addEventListener("hashchange", update);
-    return () => window.removeEventListener("hashchange", update);
+    const stopRoutes = onRoute(update);
+    const stopLinks = routeLinks();
+    return () => {
+      stopRoutes();
+      stopLinks();
+    };
   }, [archiveIssues]);
   const back = useCallback(() => navigate({kind: "archive"}), [navigate]);
   useEffect(() => {
@@ -1766,7 +1776,7 @@ export default function Home() {
           >
             Люди
           </a>
-          <a href="#pager" className={screen.kind === "pager" ? "active" : ""}>
+          <a href="/pager" className={screen.kind === "pager" ? "active" : ""}>
             Пейджер
           </a>
           {__ADMIN__ && isCurator && (
