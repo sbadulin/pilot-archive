@@ -4,7 +4,10 @@ import {
   MARKER,
   accepted,
   align,
+  alignAll,
   applySpans,
+  locateRange,
+  rangeSpans,
   censorAlso,
   closedWordsOf,
   messageId,
@@ -93,6 +96,40 @@ test('find phrases match despite OCR differences, numbers only exactly', () => {
   const found = align(queryFromPhrase('Пр.Ленипа, 40, кв. 55'), words);
   assert.ok(accepted(found));
   assert.equal(found.first, 0);
+});
+
+test('find closes every occurrence, not only the best one', () => {
+  const text = 'Звони 4-50-22, а лучше 4-50-22! Или пиши: 4-50-22.';
+  const tokens = tokenize(text);
+  const found = alignAll(queryFromPhrase('4-50-22'), tokens);
+  assert.equal(found.length, 3);
+  const spans = found.map(hit => ({ start: tokens[hit.first].start, end: tokens[hit.last].end }));
+  assert.equal(applySpans(text, spans), `Звони ${MARKER}, а лучше ${MARKER}! Или пиши: ${MARKER}.`);
+  assert.equal(alignAll(queryFromPhrase('4-50-23'), tokens).length, 0);
+});
+
+test('a range is closed from its first to its last line, across messages; a missing end is not a success', () => {
+  const pieces = ['Привет всем! Маузер.', 'Сам вчера два короба съел, психотропный препарат. Тов. Маузер.', 'Пока! Лена.'];
+  const tokens = pieces.map(tokenize);
+  const range = locateRange(queryFromPhrase('Сам вчера'), queryFromPhrase('психотропный препарат.'), tokens);
+  assert.ok(range);
+  const spans = rangeSpans(range, tokens, pieces.map(piece => piece.length));
+  assert.deepEqual([...spans.keys()], [1]);
+  assert.equal(applySpans(pieces[1], [spans.get(1)!]), `${MARKER}. Тов. Маузер.`);
+  // Конец в следующем сообщении: первое закрыто до конца, второе — с начала.
+  const across = locateRange(queryFromPhrase('два короба'), queryFromPhrase('Пока'), tokens);
+  const acrossSpans = rangeSpans(across!, tokens, pieces.map(piece => piece.length));
+  assert.deepEqual([...acrossSpans.keys()], [1, 2]);
+  assert.equal(acrossSpans.get(1)!.end, pieces[1].length);
+  assert.equal(acrossSpans.get(2)!.start, 0);
+  assert.equal(locateRange(queryFromPhrase('Сам вчера'), queryFromPhrase('ведро глюквы'), tokens), null);
+});
+
+test('signature words close by fuzzy match, not only exact', () => {
+  const closed = new Set(['нерусь']);
+  assert.equal(censorAlso('Hерусь', closed), MARKER);
+  assert.equal(censorAlso('Ваша Нерусь из 9А', closed), `Ваша ${MARKER} из 9А`);
+  assert.equal(censorAlso('Таня', closed, [{ start: 0, end: 4 }]), MARKER);
 });
 
 test('redaction spans are merged and replaced by one marker', () => {

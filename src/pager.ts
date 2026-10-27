@@ -168,13 +168,16 @@ function levenshtein(a: string, b: string): number {
 
 // Похожесть слова tesseract на слово текста, 0…1. Числа — только точно (номер дома или
 // телефона, отличающийся цифрой, — другой); половина слова, перенесённая на другую строку,
-// засчитывается за совпадение.
+// засчитывается за совпадение, если это хотя бы половина слова (не «про» в «пропутинскими»).
+// Короткие слова — не больше одной ошибки («Пушку» — не «пятку»).
 export function similarity(a: string, b: string): number {
   if (a === b) return 1;
-  if (/\d/.test(a) || /\d/.test(b)) return 0;
+  // Цифры сравниваются без дефисов: tesseract склеивает «6-42-» / «90» в «6-4290».
+  if (/\d/.test(a) || /\d/.test(b)) return a.replace(/\D/g, '') === b.replace(/\D/g, '') && /^[\d-]+$/.test(a) && /^[\d-]+$/.test(b) ? 1 : 0;
   const sim = 1 - levenshtein(a, b) / Math.max(a.length, b.length);
   const [short, long] = a.length <= b.length ? [a, b] : [b, a];
-  if (short.length >= 3 && (long.startsWith(short) || long.endsWith(short))) return Math.max(sim, 0.8);
+  if (short.length >= 4 && short.length * 2 >= long.length && (long.startsWith(short) || long.endsWith(short))) return Math.max(sim, 0.8);
+  if (long.length <= 5 && sim < 0.75) return 0;
   return sim;
 }
 
@@ -229,9 +232,58 @@ export function align(query: QueryToken[], target: Token[]): Alignment | null {
   return { score: best, covered, matched, first, last };
 }
 
-// Совпадение принято, если найдено больше половины закрытых слов (не меньше одного).
-export const accepted = (found: Alignment | null): found is Alignment =>
-  !!found && found.matched >= Math.max(1, Math.ceil(found.covered / 2));
+// Совпадение принято, если найдена доля ratio закрытых слов (не меньше одного): для плашки,
+// где tesseract мог прочитать слова криво, хватает половины.
+export const accepted = (found: Alignment | null, ratio = 0.5): found is Alignment =>
+  !!found && found.matched >= Math.max(1, Math.ceil(found.covered * ratio));
+
+// Все непересекающиеся вхождения: лучшее, затем рекурсивно слева и справа от него.
+// Для find и для подписи/адресатов — закрыть каждое, а не только лучшее. Порог строже, чем у
+// одиночного поиска: «не хочу» — не вхождение «не хочу жить».
+export const STRICT = 0.75;
+export function alignAll(query: QueryToken[], target: Token[], ratio = STRICT, offset = 0): Alignment[] {
+  const found = align(query, target);
+  if (!accepted(found, ratio)) return [];
+  const shifted = { ...found, first: found.first + offset, last: found.last + offset };
+  return [
+    ...alignAll(query, target.slice(0, found.first), ratio, offset),
+    shifted,
+    ...alignAll(query, target.slice(found.last + 1), ratio, offset + found.last + 1),
+  ];
+}
+
+// Кусок «от… до…» (решение from/to или область region) в сообщениях полосы, идущих подряд:
+// начало — лучшее совпадение start, конец — первое совпадение end после него в том же или
+// одном из следующих maxPieces − 1 сообщений. Не нашлось начала или конца — null: тогда
+// вызывающий закрывает всё целиком и отправляет на проверку, а не закрывает половину.
+export type RangeHit = { first: { piece: number; token: number }; last: { piece: number; token: number } };
+export function locateRange(start: QueryToken[], end: QueryToken[], pieces: Token[][], maxPieces = 4): RangeHit | null {
+  let best: { piece: number; found: Alignment } | null = null;
+  pieces.forEach((tokens, piece) => {
+    const found = align(start, tokens);
+    if (accepted(found) && (!best || found.score > best.found.score)) best = { piece, found };
+  });
+  if (!best) return null;
+  const { piece: from, found: head } = best as { piece: number; found: Alignment };
+  for (let piece = from; piece < Math.min(pieces.length, from + maxPieces); piece += 1) {
+    const offset = piece === from ? head.first : 0;
+    const tail = align(end, pieces[piece].slice(offset));
+    if (accepted(tail)) return { first: { piece: from, token: head.first }, last: { piece, token: offset + tail.last } };
+  }
+  return null;
+}
+
+// Закрытые куски по сообщениям для найденного диапазона: от начала до конца сообщения,
+// промежуточные сообщения целиком, у последнего — с начала.
+export function rangeSpans(range: RangeHit, pieces: Token[][], lengths: number[]): Map<number, Span> {
+  const spans = new Map<number, Span>();
+  for (let piece = range.first.piece; piece <= range.last.piece; piece += 1) {
+    const start = piece === range.first.piece ? pieces[piece][range.first.token].start : 0;
+    const end = piece === range.last.piece ? pieces[piece][range.last.token].end : lengths[piece];
+    spans.set(piece, { start, end });
+  }
+  return spans;
+}
 
 // Слова tesseract → токены запроса. Перенос «То-» / «питься» склеивается в одно слово, закрытое,
 // если закрыта любая его часть. Контекст — до `context` незакрытых слов того же блока по бокам.
@@ -309,9 +361,17 @@ export function nameSpans(text: string, name: string): Span[] {
   return [...text.matchAll(pattern)].map(found => ({ start: found.index, end: found.index + found[0].length }));
 }
 
-// Подпись и адресаты тоже публичны: слово, закрытое в тексте, закрывается и в них.
-export function censorAlso(value: string, closedWords: Set<string>): string {
-  const spans = tokenize(value).filter(token => closedWords.has(token.norm)).map(({ start, end }) => ({ start, end }));
+// Подпись и адресаты тоже публичны: слово, закрытое в тексте, закрывается и в них — и похожее
+// написание тоже («Нерусь» в тексте, «Hерусь» в подписи): при сомнении закрываем.
+export function alsoSpans(value: string, closedWords: Set<string>): Span[] {
+  const closed = [...closedWords];
+  return tokenize(value)
+    .filter(token => closedWords.has(token.norm) || (token.norm.length >= 3 && closed.some(word => similarity(word, token.norm) >= 0.8)))
+    .map(({ start, end }) => ({ start, end }));
+}
+
+export function censorAlso(value: string, closedWords: Set<string>, extra: Span[] = []): string {
+  const spans = [...alsoSpans(value, closedWords), ...extra];
   return spans.length ? applySpans(value, spans) : value;
 }
 
