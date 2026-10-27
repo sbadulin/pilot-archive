@@ -154,7 +154,8 @@ export type Nick = { key: string; name: string; spellings: string[]; class: Nick
 // staff: nicks of the editorial who wrote in the pager and commented on readers' messages.
 // writers: nick → the same person's bylines in the newspaper, for «В газете».
 // members: a shared editorial signature → who usually wrote under it («Пилоты»).
-export type NickRules = { aliases?: Record<string, string>; distinct?: string[][]; joint?: Record<string, string[]>; shared?: string[]; staff?: string[]; writers?: Record<string, string[]>; members?: Record<string, string[]> };
+// nicks: confirmed by the person as their own, so a profile even if it reads as a first name («Натуська»).
+export type NickRules = { aliases?: Record<string, string>; distinct?: string[][]; joint?: Record<string, string[]>; shared?: string[]; staff?: string[]; writers?: Record<string, string[]>; members?: Record<string, string[]>; nicks?: string[] };
 
 const aliasOf = (core: string, rules: NickRules) =>
   Object.entries(rules.aliases ?? {}).find(([spelling]) => normalizeName(spelling) === normalizeName(core))?.[1] ?? null;
@@ -198,8 +199,9 @@ export function buildNicks(messages: NickMessage[], rules: NickRules = {}): Nick
     }
   }
   const shared = new Set((rules.shared ?? []).map(name => normalizeName(name)));
-  // The editorial is a profile even under an editorial signature («Пилоты»).
-  const staff = new Set((rules.staff ?? []).map(name => nickKey(name, rules)));
+  // The editorial is a profile even under an editorial signature («Пилоты»), and so is a nick its
+  // owner confirmed even if it reads as a first name («Натуська»).
+  const confirmed = new Set([...(rules.staff ?? []), ...(rules.nicks ?? [])].map(name => nickKey(name, rules)));
   return [...groups.entries()].map(([key, group]) => {
     const spellings = [...group.spellings.entries()].sort((a, b) => b[1] - a[1]).map(([spelling]) => spelling);
     const name = group.target ?? spellings[0];
@@ -207,7 +209,7 @@ export function buildNicks(messages: NickMessage[], rules: NickRules = {}): Nick
     // initial («Пашк.A not Bad» → «Пашк.A»): then one unique spelling makes it a nick.
     const named = classifyNick(name);
     const aliased = group.target !== null && named === 'firstName' && spellings.some((spelling) => classifyNick(spelling) === 'unique');
-    const nickClass: NickClass = shared.has(key) ? 'shared' : aliased || staff.has(key) ? 'unique' : named;
+    const nickClass: NickClass = shared.has(key) ? 'shared' : aliased || confirmed.has(key) ? 'unique' : named;
     const dates = [...group.dates].sort();
     return { key, name, spellings, class: nickClass, unique: nickClass === 'unique', messages: group.ids.length, first: dates[0], last: dates[dates.length - 1], ids: group.ids };
   }).sort((a, b) => b.messages - a.messages || (a.key < b.key ? -1 : 1));
