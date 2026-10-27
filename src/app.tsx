@@ -49,6 +49,9 @@ import {
   parseFilename,
   validateMetadata,
   yearMonthsLabel,
+  isSpecial,
+  issueLabel,
+  issueShortLabel,
   type Issue,
 } from "./metadata";
 import {
@@ -72,7 +75,8 @@ type Draft = {
   thumbnails: string[];
   largePages: number[];
 };
-const years = Array.from({length: 12}, (_, i) => 1996 + i);
+// 1996–2007 plus the 2025 special issue.
+const years = [...Array.from({length: 12}, (_, i) => 1996 + i), 2025];
 const logoByYear: Record<number, string> = {};
 const logoForYear = (year: number) => logoByYear[year] ?? "/PilotBW.svg";
 const yearRoute = (year: number) => `#year-${year}`;
@@ -473,7 +477,7 @@ function Reader({
         </button>
         <div className="reader-title">
           <b>
-            № {issue.number} <span>({issue.serial})</span>
+            {isSpecial(issue) ? issueLabel(issue) : <>№ {issue.number} <span>({issue.serial})</span></>}
           </b>
           <span>{issue.dateLabel}</span>
           <AdultBadge />
@@ -944,7 +948,7 @@ function Upload({onBack}: {onBack: () => void}) {
     void curatorTools()
       .then((tools) => tools.retryRecognition(next, {progress: setRecognition, error: setQueueError}))
       .then((message) => setRecognitionLog((log) => [message, ...log]))
-      .catch((error: Error) => setRecognitionLog((log) => [`№ ${next.number}: ${error.message}`, ...log]))
+      .catch((error: Error) => setRecognitionLog((log) => [`${issueShortLabel(next)}: ${error.message}`, ...log]))
       .finally(() => {
         setRecognizing(null);
         setRecognition("");
@@ -986,7 +990,7 @@ function Upload({onBack}: {onBack: () => void}) {
       try {
         await approve(item);
       } catch (error) {
-        setQueueError(`№ ${item.number}: ${(error as Error).message}`);
+        setQueueError(`${issueShortLabel(item)}: ${(error as Error).message}`);
       }
     }
     setModerating(null);
@@ -1372,7 +1376,7 @@ function Upload({onBack}: {onBack: () => void}) {
                 <div>
                   <span className="black-label">Предпросмотр заявки</span>
                   <h2 id="submission-preview-title">
-                    № {preview.item.number} ({preview.item.serial}) ·{" "}
+                    {issueLabel(preview.item)} ·{" "}
                     {preview.item.year}
                   </h2>
                   <p>{preview.item.filename}</p>
@@ -1459,7 +1463,7 @@ function Upload({onBack}: {onBack: () => void}) {
               )}
               {recognizing && (
                 <p className="curator-message" role="status">
-                  {recognition || `Готовим № ${recognizing.number} к распознаванию…`}
+                  {recognition || `Готовим ${isSpecial(recognizing) ? "спецвыпуск" : `№ ${recognizing.number}`} к распознаванию…`}
                   {recognitionQueue.length > 0 && ` · в очереди ещё ${recognitionQueue.length}`}
                 </p>
               )}
@@ -1478,7 +1482,7 @@ function Upload({onBack}: {onBack: () => void}) {
                     <article className="queue-item" key={item.id}>
                       <div className="queue-item-main">
                         <strong>
-                          № {item.number} ({item.serial}) · {item.year}
+                          {issueLabel(item)} · {item.year}
                         </strong>
                         <span>{item.dateLabel}</span>
                         <span>{item.pages} страниц</span>
@@ -1673,7 +1677,7 @@ export default function Home() {
         : undefined;
     document.title =
       screen.kind === "reader"
-        ? `№ ${activeIssue?.number ?? ""} · Первый Пилот`
+        ? `${activeIssue ? issueShortLabel(activeIssue) : "№"} · Первый Пилот`
         : screen.kind === "upload"
           ? "Добавить выпуск · Первый Пилот"
           : "Первый Пилот · Архив газеты 1996–2007";
@@ -1845,12 +1849,12 @@ export default function Home() {
                       <button
                         className="cover-button"
                         onClick={() => navigate({kind: "reader", id: issue.id})}
-                        aria-label={`Читать выпуск № ${issue.number} от ${issue.dateLabel}`}
+                        aria-label={`Читать ${isSpecial(issue) ? "спецвыпуск" : `выпуск № ${issue.number}`} от ${issue.dateLabel}`}
                       >
                         <div className="cover-frame">
                           <img
                             src={scanUrl(issue, 1)}
-                            alt={`Обложка газеты Первый Пилот № ${issue.number} (${issue.serial}), ${issue.dateLabel}`}
+                            alt={`Обложка газеты Первый Пилот ${issueLabel(issue)}, ${issue.dateLabel}`}
                             width={issue.id === 1 ? 892 : 925}
                             height={1300}
                             fetchPriority="high"
@@ -1863,12 +1867,12 @@ export default function Home() {
                       </button>
                       <div className="issue-meta">
                         <h3>
-                          № {issue.number} <span>({issue.serial})</span>
+                          {isSpecial(issue) ? issueLabel(issue) : <>№ {issue.number} <span>({issue.serial})</span></>}
                         </h3>
                         <a
                           className="issue-arrow"
                           href={issueRoute(issue)}
-                          aria-label={`Открыть выпуск № ${issue.number}`}
+                          aria-label={`Открыть ${isSpecial(issue) ? "спецвыпуск" : `выпуск № ${issue.number}`}`}
                         >
                           <ArrowRight size={24} />
                         </a>

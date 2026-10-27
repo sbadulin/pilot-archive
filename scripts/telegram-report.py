@@ -19,7 +19,11 @@ from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 MOSCOW = ZoneInfo('Europe/Moscow')
-BOTS = re.compile(r'bot|crawl|spider|preview|curl|wget|python|monitor|^node$|playwright|headlesschrome', re.I)
+BOTS = re.compile(r'bot|crawl|spider|preview|curl|wget|python|monitor|^node$|playwright|headlesschrome'
+                  # Scanners seen in the log: pinned old Chrome builds and site checkers.
+                  r'|Chrome/78\.|CrOS x86_64 14541\.0\.0|niche-gap-finder|BackupLand|Palo Alto Networks|iskalo', re.I)
+PAGES = ('/', '/index.html')
+MANIFEST = '/archive/manifest.json'
 
 
 def atomic_json(path, value):
@@ -51,16 +55,87 @@ def period(kind, today):
 
 
 def blank_day():
-    return dict(visitors=set(), searchers=set(), views=0, pdf_opens=0,
-                searches=0, selections=0, no_results=0,
-                queries=Counter(), authors=Counter(), empty_queries=Counter(), issues=Counter())
+    # page_loads and manifest_readers hold (IP, User-Agent) in memory only; finish_day() drops them.
+    return dict(visitors=set(), searchers=set(), adults=set(), views=0, pdf_opens=0,
+                searches=0, selections=0, no_results=0, page_loads=Counter(), manifest_readers=set(),
+                queries=Counter(), authors=Counter(), empty_queries=Counter(), issues=Counter(),
+                **blank_pager())
+
+
+# Pager fields are optional in saved days: snapshots written before the section existed lack them.
+PAGER_COUNTS = ('pager_openers', 'pager_opens', 'pager_profiles', 'pager_dialogs',
+                'pager_searches', 'pager_no_results', 'pager_selections')
+PAGER_TOPS = ('pager_profile_nicks', 'pager_queries', 'pager_empty_queries', 'pager_selected')
+
+
+def blank_pager():
+    row = {key: 0 for key in PAGER_COUNTS}
+    row.update({key: Counter() for key in PAGER_TOPS})
+    # (IP, User-Agent) in memory only; finish_day() turns it into a count.
+    row['pager_openers'] = set()
+    return row
+
+
+def event_text(params, name, minimum=1):
+    # Same limits as author queries: collapsed whitespace, lower case, 120 chars, no control characters.
+    value = ' '.join(params.get(name, [''])[0].split()).lower()
+    if not minimum <= len(value) <= 120 or any(ord(char) < 32 or ord(char) == 127 for char in value):
+        return None
+    return value
+
+
+def add_pager_event(row, identity, query):
+    params = parse_qs(query, max_num_fields=10)
+    event = params.get('event', [''])[0]
+    if event == 'open':
+        row['pager_opens'] += 1
+        row['pager_openers'].add(identity)
+    elif event == 'profile':
+        nick = event_text(params, 'nick')
+        if nick:
+            row['pager_profiles'] += 1
+            row['pager_profile_nicks'][nick] += 1
+    elif event == 'dialog':
+        if event_text(params, 'nick') and event_text(params, 'with'):
+            row['pager_dialogs'] += 1
+    elif event == 'search':
+        text = event_text(params, 'q', 2)
+        found = params.get('found', [''])[0]
+        if text and found in ('0', '1'):
+            row['pager_searches'] += 1
+            row['pager_queries'][text] += 1
+            if found == '0':
+                row['pager_no_results'] += 1
+                row['pager_empty_queries'][text] += 1
+    elif event == 'select':
+        text = event_text(params, 'q')
+        if text and params.get('kind', [''])[0] in ('author', 'to'):
+            row['pager_selections'] += 1
+            row['pager_selected'][text] += 1
+
+
+def finish_day(row):
+    """Turn a day's in-memory identities into the saved counts, with no IP or User-Agent.
+
+    A page load counts only if the same IP + browser also fetched the manifest that day.
+    The app always revalidates it (Cache-Control: no-cache), so a real visit logs it as
+    200 or 304. Scanners that fetch only the HTML never do."""
+    page_loads, readers = row.pop('page_loads'), row.pop('manifest_readers')
+    for identity, count in page_loads.items():
+        if identity in readers:
+            row['visitors'].add(identity)
+            row['views'] += count
+    for key in ('visitors', 'searchers', 'adults', 'pager_openers'):
+        row[key] = len(row[key])
+    return row
 
 
 def add_record(days, record):
     request = record.get('request', {})
     if request.get('host', '').split(':')[0] != 'pilot-archive.ru':
         return
-    if request.get('method') != 'GET' or not (200 <= record.get('status', 0) < 400):
+    status = record.get('status', 0)
+    if request.get('method') != 'GET' or not (200 <= status < 400):
         return
     headers = {key.lower(): value for key, value in request.get('headers', {}).items()}
     agent = (headers.get('user-agent') or [''])[0]
@@ -72,9 +147,16 @@ def add_record(days, record):
     row = days[day]
     identity = (request.get('remote_ip', ''), agent)
     url = urlsplit(request.get('uri', ''))
-    if url.path in ('/', '/index.html'):
-        row['views'] += 1
-        row['visitors'].add(identity)
+    # Redirects (e.g. 308 http→https) are not views: only 2xx and 304 count.
+    loaded = status < 300 or status == 304
+    if url.path in PAGES:
+        if loaded:
+            row['page_loads'][identity] += 1
+    elif url.path == MANIFEST:
+        if loaded:
+            row['manifest_readers'].add(identity)
+    elif url.path == '/_stats/adult' and status == 204:
+        row['adults'].add(identity)
     elif url.path.startswith('/archive/') and url.path.lower().endswith('.pdf'):
         if re.match(r'^bytes=0-', (headers.get('range') or ['bytes=0-'])[0]):
             row['pdf_opens'] += 1
@@ -101,6 +183,9 @@ def add_record(days, record):
         elif event == 'select':
             row['selections'] += 1
             row['authors'][query] += 1
+    elif url.path == '/_stats/pager' and status == 204:
+        # Counted like author and 18+ events: any non-bot identity whose beacon Caddy answered.
+        add_pager_event(row, identity, url.query)
 
 
 def collect(log_dir, state_dir, now):
@@ -128,8 +213,7 @@ def collect(log_dir, state_dir, now):
                 except (ValueError, TypeError, KeyError, OverflowError, AttributeError):
                     malformed += 1
     for day, row in pending.items():
-        row['visitors'] = len(row['visitors'])
-        row['searchers'] = len(row['searchers'])
+        finish_day(row)
         row['complete'] = started <= datetime.combine(day, time.min, MOSCOW)
         row['date'] = str(day)
         atomic_json(state_dir / 'days' / f'{day}.json', row)
@@ -144,12 +228,45 @@ def top_lines(title, values):
     return ['', title] + [f'• {name[:80]} — {count}' for name, count in values.most_common(5)]
 
 
+def pager_active(rows):
+    return any(row.get(key) for row in rows for key in PAGER_COUNTS)
+
+
+def pager_lines(kind, rows):
+    # Rendered only when the period has pager activity, so earlier reports stay unchanged.
+    if not pager_active(rows):
+        return []
+    total = lambda key: sum(row.get(key, 0) for row in rows)
+    if kind == 'day':
+        opened = f'Открыли раздел: {total("pager_openers")} посетителей, {total("pager_opens")} раз'
+    else:
+        opened = (f'Открытия раздела: {total("pager_opens")}; посетителей в день, '
+                  f'в среднем: {total("pager_openers") / len(rows):.1f}')
+    lines = ['', 'Пейджер', opened,
+             f'Просмотры профилей: {total("pager_profiles")}',
+             f'Просмотры диалогов: {total("pager_dialogs")}',
+             f'Поиск по никам: {total("pager_searches")}',
+             f'Поиски без результата: {total("pager_no_results")}',
+             f'Выбор ника или адресата: {total("pager_selections")}']
+    for key, title in [('pager_profile_nicks', 'Чаще смотрели профили:'), ('pager_selected', 'Чаще выбирали:'),
+                       ('pager_queries', 'Чаще искали в Пейджере:'),
+                       ('pager_empty_queries', 'Не нашли в Пейджере:')]:
+        counter = Counter()
+        for row in rows:
+            counter.update(row.get(key, {}))
+        lines.extend(top_lines(title, counter))
+    return lines
+
+
 def render(kind, start, end, state_dir):
     rows = [read_json(state_dir / 'days' / f'{day}.json') for day in dates(start, end)]
     known = [row for row in rows if row is not None]
     if not known:
         return None
-    if not any(row[key] for row in known for key in ('views', 'pdf_opens', 'searches', 'selections')):
+    # Days saved before the 18+ beacon have no 'adults' key: read every count with a default.
+    total = lambda key: sum(row.get(key, 0) for row in known)
+    if not any(total(key) for key in ('views', 'pdf_opens', 'searches', 'selections', 'adults')) \
+            and not pager_active(known):
         return None
     label = {'day': 'за день', 'week': 'за неделю', 'month': 'за месяц'}[kind]
     span = start.strftime('%d.%m.%Y') if kind == 'day' else f'{start:%d.%m.%Y} — {end - timedelta(days=1):%d.%m.%Y}'
@@ -157,13 +274,14 @@ def render(kind, start, end, state_dir):
     complete = sum(row['complete'] for row in known)
     if complete != len(rows):
         lines += [f'Неполные данные: полных дней {complete} из {len(rows)}.']
-    total = lambda key: sum(row[key] for row in known)
     if kind == 'day':
         lines += [f'Посетители: {total("visitors")}', f'Пользовались поиском: {total("searchers")}']
     else:
         lines += [f'Посетителей в день, в среднем по дням с данными: {total("visitors") / len(known):.1f}',
                   f'Максимум посетителей за день: {max(row["visitors"] for row in known)}']
-    lines += [f'Открытия сайта: {total("views")}',
+    # The browser remembers the confirmation, so a reader confirms once: daily counts add up.
+    lines += [f'Подтвердили 18+: {total("adults")}',
+              f'Открытия сайта: {total("views")}',
               f'Загрузки выпусков: {total("pdf_opens")}',
               f'Поисковые запросы: {total("searches")}',
               f'Выбор автора: {total("selections")}',
@@ -174,7 +292,8 @@ def render(kind, start, end, state_dir):
         for row in known:
             counter.update(row.get(key, {}))
         lines.extend(top_lines(title, counter))
-    lines += ['', 'Посетитель ≈ IP + браузер за день. Известные боты исключены.',
+    lines.extend(pager_lines(kind, known))
+    lines += ['', 'Посетитель ≈ IP + браузер за день, загрузивший каталог архива. Известные боты исключены.',
               'Загрузки PDF приблизительны: кеш и повторные запросы влияют на число.']
     tracking = read_json(state_dir / 'author-tracking.json')
     if tracking is None:

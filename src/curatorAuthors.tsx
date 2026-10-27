@@ -3,7 +3,7 @@ import {ArrowLeft, Search} from "lucide-react";
 import {jsonRequest} from "./ingestionClient";
 import {matchesQuery, MIN_QUERY} from "./authorSearch";
 import {publishSearchIndex} from "./authorsPublish";
-import type {Issue} from "./metadata";
+import {issueLabel, type Issue} from "./metadata";
 
 type NameRow = {name: string; key: string; count: number; hidden: number};
 type CreditRow = {
@@ -52,7 +52,7 @@ function AddCredit({issues, names, name, busy, onAdd}: {issues: Issue[]; names: 
         <option value="">Выберите номер</option>
         {issues.map((item) => (
           <option key={issueKey(item)} value={issueKey(item)}>
-            № {item.number} ({item.serial}) · {item.dateLabel}
+            {issueLabel(item)} · {item.dateLabel}
           </option>
         ))}
       </select>
@@ -241,7 +241,7 @@ export function CuratorAuthors({issues, onBack}: {issues: Issue[]; onBack: () =>
                 {credits.map((credit) => (
                   <li key={credit.id} className={credit.status === "hidden" ? "hidden-credit" : ""}>
                     <a href={`#issue-${credit.year}-${credit.number}-${credit.serial}-p${credit.page}`} target="_blank" rel="noreferrer">
-                      № {credit.number} ({credit.serial}) · {credit.year} · стр. {credit.page}
+                      {issueLabel(credit)} · {credit.year} · стр. {credit.page}
                     </a>
                     <span className="curator-kind">
                       {KIND[credit.kind] ?? credit.kind}

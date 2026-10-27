@@ -4,6 +4,10 @@ import {openPdf} from "./pdf";
 import {printedPages} from "./readerLayout";
 import {loadRecognizedSheets, loadSubmissionPdf, recognizeSubmissionSheet, type Submission} from "./ingestionClient";
 import {publishSearchIndex} from "./authorsPublish";
+import {isSpecial, issueShortLabel} from "./metadata";
+
+// "в № 05" / "в спецвыпуске".
+const inIssue = (item: Submission) => (isSpecial(item) ? "в спецвыпуске" : `в № ${item.number}`);
 
 export {publishSearchIndex};
 
@@ -98,7 +102,7 @@ export const recognitionSummary = (result: RecognitionResult) =>
 type Report = {progress: (text: string) => void; error: (text: string) => void};
 
 const progressOf = (item: Submission, report: Report) => (done: number, total: number, round: number) =>
-  report.progress(`Распознаём подписи в № ${item.number}: ${done} из ${total}${round ? ` (повтор ${round})` : ""}`);
+  report.progress(`Распознаём подписи ${inIssue(item)}: ${done} из ${total}${round ? ` (повтор ${round})` : ""}`);
 
 const publishOrWarn = (report: Report, prefix: string) =>
   publishSearchIndex().catch((error: Error) =>
@@ -109,8 +113,8 @@ const publishOrWarn = (report: Report, prefix: string) =>
 // approval, the missed ones on a retry), then republish the site search.
 export async function retryRecognition(item: Submission, report: Report): Promise<string> {
   const result = await recognizeIssue(item, progressOf(item, report), true);
-  if (result.sheets === 0) return `В № ${item.number} все листы уже распознаны.`;
-  const message = `№ ${item.number}: ${recognitionSummary(result)}`;
+  if (result.sheets === 0) return `${isSpecial(item) ? "В спецвыпуске" : `В № ${item.number}`} все листы уже распознаны.`;
+  const message = `${issueShortLabel(item)}: ${recognitionSummary(result)}`;
   report.progress(message);
   // Nothing new to publish when recognition stopped or found nothing.
   if (!result.stopped && result.names > 0) await publishOrWarn(report, "Подписи сохранены, но поиск на сайте не обновился");

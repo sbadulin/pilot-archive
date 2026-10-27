@@ -11,10 +11,22 @@ export const issues: Issue[] = [
   { id: 3, year: 2000, slug: 'issue-13-0078', number: '13', serial: '0078', date: '2000-03-29', dateLabel: '29 марта 2000', pages: 19, filename: 'пилот (1).pdf' },
   { id: 4, year: 2002, slug: 'issue-32-0201', number: '32', serial: '0201', date: '2002-12-01', dateLabel: 'декабрь 2002', pages: 32, filename: '2026.06.07_PP0201_2002.12.pdf' },
 ];
+// A special issue lies outside the 1996–2007 run: stored as number 00, serial 0000.
+export const isSpecial = (issue: { number: string | number }) => Number(issue.number) === 0;
+export const SPECIAL_LABEL = 'Спецвыпуск';
+// "№ 01 (0066)", or "Спецвыпуск" for a special issue.
+export const issueLabel = (issue: { number: string | number; serial?: string }) =>
+  isSpecial(issue) ? SPECIAL_LABEL : `№ ${issue.number}${issue.serial ? ` (${issue.serial})` : ''}`;
+// "№ 01", or "Спецвыпуск".
+export const issueShortLabel = (issue: { number: string | number }) => isSpecial(issue) ? SPECIAL_LABEL : `№ ${issue.number}`;
 const monthNames = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
 // "Январь–август" from the issue dates, so the year summary follows the archive as issues are added.
-export function yearMonthsLabel(issues: Pick<Issue, 'date'>[]) {
-  const months = issues.map((issue) => Number(issue.date.slice(5, 7))).filter((month) => month >= 1 && month <= 12);
+// A special issue's date only orders it (its real release date is unknown), so it names no month;
+// a year with nothing but special issues reads «Специальный выпуск».
+export function yearMonthsLabel(issues: (Pick<Issue, 'date'> & { number?: string })[]) {
+  const regular = issues.filter((issue) => issue.number === undefined || !isSpecial({ number: issue.number }));
+  if (issues.length && !regular.length) return 'Специальный выпуск';
+  const months = regular.map((issue) => Number(issue.date.slice(5, 7))).filter((month) => month >= 1 && month <= 12);
   if (!months.length) return '';
   const [first, last] = [Math.min(...months), Math.max(...months)];
   const label = first === last ? monthNames[first - 1] : `${monthNames[first - 1]}–${monthNames[last - 1]}`;

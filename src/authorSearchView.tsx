@@ -3,7 +3,7 @@ import {Search} from "lucide-react";
 import {authorsIndexUrl} from "./config";
 import {MIN_QUERY, searchNames} from "./authorSearch";
 import {trackAuthor} from "./authorAnalytics";
-import type {Issue} from "./metadata";
+import {issueLabel, type Issue} from "./metadata";
 import type {IndexName} from "../functions/api/_lib/authorsIndex";
 
 const materialCount = (count: number) => {
@@ -124,7 +124,7 @@ export function AuthorSearch({issues, onClose}: {issues: Issue[]; onClose: () =>
                 <li key={`${credit.issue}-${credit.page}-${credit.title ?? ""}`}>
                   <a href={`#issue-${credit.issue}-p${credit.page}`}>
                     <span className="author-where">
-                      № {issue.number} ({issue.serial}) · {issue.dateLabel} · стр. {credit.page}
+                      {issueLabel(issue)} · {issue.dateLabel} · стр. {credit.page}
                     </span>
                     {credit.title && <span className="author-title">{credit.title}</span>}
                   </a>
