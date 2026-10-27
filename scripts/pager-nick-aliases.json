@@ -5,7 +5,8 @@
     "Бэд": "BAD",
     "БЭД": "BAD",
     "Talless RAT": "Rat",
-    "RAT": "Rat"
+    "RAT": "Rat",
+    "Kurtочка": "Kurtочк@"
   },
   "distinct": [
     [
@@ -19,9 +20,7 @@
     ],
     [
       "Kurt",
-      "Kurtочк@",
-      "Kurtovk@",
-      "Kurtочка"
+      "Kurtочк@"
     ]
   ]
 }
