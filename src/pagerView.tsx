@@ -89,7 +89,7 @@ function useChunks(total: number) {
   return {count, more};
 }
 
-const pageHref = (message: FeedMessage) => `#issue-${message.issue}-p${message.sheet}`;
+const pageHref = (message: FeedMessage) => `#issue-${message.issue}-p${message.page}`;
 const profileHref = (profile: SiteProfile, tab: PagerTab = "own", other?: SiteProfile) =>
   pagerHash(profile.name, tab, other?.name);
 
@@ -145,7 +145,7 @@ function Where({message}: {message: FeedMessage}) {
   return (
     <a href={pageHref(message)}>
       {isSpecial(issue) ? "" : `${dateLabel(message.date)} · `}
-      {issueLabel(issue)} · стр. {message.sheet}
+      {issueLabel(issue)} · стр. {message.pages}
     </a>
   );
 }
@@ -413,6 +413,17 @@ function PagerSearch({model, onAddressee}: {model: PagerModel | null; onAddresse
         </ul>
       )}
       {long && index && !matches.length && <p className="author-empty">Такого ника среди авторов и адресатов нет.</p>}
+      {!long && model && model.featured.length > 0 && (
+        <p className="pg-examples">
+          Например:{" "}
+          {model.featured.map((name, i) => (
+            <span key={name}>
+              {i > 0 && ", "}
+              <a href={pagerHash(name)}>{name}</a>
+            </span>
+          ))}
+        </p>
+      )}
     </section>
   );
 }

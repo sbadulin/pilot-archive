@@ -5,23 +5,29 @@ import { normalizeName } from './authorNames.ts';
 import { foldCase, matchesQuery, MIN_QUERY } from './authorSearch.ts';
 import { classifyNick, nickCore } from './pagerNicks.ts';
 import { messageWhere, type PagerSite, type SiteMessage, type SiteProfile } from './pagerSite.ts';
+import { printedPages } from './readerLayout.ts';
 
 export { MIN_QUERY };
 export { PAGER_TABS, isPagerHash, pagerHash, parsePagerRoute, type PagerRoute, type PagerTab } from './pagerRoute.ts';
 
-export type FeedMessage = { id: string; date: string; issue: string; sheet: number; from: string | null; to: string[]; text: string; nicks: string[]; toKeys: (string | null)[] };
+// sheet is the PDF sheet; page and pages are the printed page the reader's links name and its label
+// («8–9» for a spread), which differ after a two-page spread.
+export type FeedMessage = { id: string; date: string; issue: string; sheet: number; page: number; pages: string; from: string | null; to: string[]; text: string; nicks: string[]; toKeys: (string | null)[] };
 export type PagerModel = {
   messages: FeedMessage[]; // oldest first
   profiles: Map<string, SiteProfile>;
   own: Map<string, FeedMessage[]>; // profile key → its messages
   byName: Map<string, string>; // normalized name or spelling → profile key
   names: string[]; // every profile name and spelling, for cutting longer nicks out of texts
+  featured: string[]; // search examples that have a profile
 };
 
 export function preparePager(site: PagerSite): PagerModel {
   const messages = site.messages.map((message: SiteMessage): FeedMessage => {
     const { issue, sheet } = messageWhere(message.id);
-    return { id: message.id, date: site.dates[issue] ?? '', issue, sheet, from: message.from ?? null, to: message.to ?? [], text: message.text, nicks: message.nicks ?? [], toKeys: [] };
+    // Only sheets before this one shift its number, so the count can stop at it.
+    const numbering = printedPages(sheet, site.spreads?.[issue]);
+    return { id: message.id, date: site.dates[issue] ?? '', issue, sheet, page: numbering.first(sheet), pages: numbering.label(sheet), from: message.from ?? null, to: message.to ?? [], text: message.text, nicks: message.nicks ?? [], toKeys: [] };
   });
   messages.sort((a, b) => a.date.localeCompare(b.date));
   const profiles = new Map(site.profiles.map((profile) => [profile.key, profile]));
@@ -35,12 +41,13 @@ export function preparePager(site: PagerSite): PagerModel {
       if (key && !byName.has(key)) byName.set(key, profile.key);
     }
   }
-  const model: PagerModel = { messages, profiles, own: new Map(), byName, names: [] };
+  const model: PagerModel = { messages, profiles, own: new Map(), byName, names: [], featured: [] };
   // Which addressees are profiles, worked out once: mentions, dialogs and links all need it.
   for (const message of messages) message.toKeys = message.to.map((name) => profileOf(model, name));
   const own = model.own;
   for (const message of messages) for (const key of message.nicks) own.set(key, [...(own.get(key) ?? []), message]);
   model.names = [...new Set(site.profiles.flatMap((profile) => [profile.name, ...profile.spellings]))];
+  model.featured = (site.featured ?? []).filter((name) => profiles.has(byName.get(foldCase(normalizeName(name))) ?? ''));
   return model;
 }
 
