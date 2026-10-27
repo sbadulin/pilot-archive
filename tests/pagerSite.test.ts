@@ -64,10 +64,40 @@ const key = (name: string) => profileOf(model, name)!;
 
 test('held and retold messages never reach the site', () => {
   assert.equal(stats.total, 12);
-  assert.deepEqual(stats.dropped, { hold: 1, retold: 1, duplicate: 0 });
+  assert.deepEqual(stats.dropped, { hold: 1, retold: 1, duplicate: 0, editorial: 0 });
   assert.equal(site.messages.length, 10);
   assert.ok(!site.messages.some((message) => message.text.includes('пересказ') || message.text.includes('цензурой')));
   assert.ok(!site.profiles.some((profile) => ['Hidden', 'Retold'].includes(profile.name)));
+});
+
+test('editorial texts and running headers never reach the site', () => {
+  const contest = at(13, null, [], 'УЧАСТВУЮТ ВСЕ, КТО ПОЖЕЛАЕТ – ШКОЛЬНИКИ, СТУДЕНТЫ…');
+  const header = at(14, null, [], '12\n\n«ПП» • 5 апреля 2000 года, среда, № 14 (0079)');
+  const poem = at(15, null, [], '12 строк о любви • без подписи');
+  const built = buildPagerSite([...fixture, contest, header, poem], rules, authors, { exclude: { [contest.id]: 'конкурс' } });
+  assert.equal(built.stats.dropped.editorial, 2);
+  assert.ok(!built.site.messages.some((message) => message.id === contest.id || message.id === header.id));
+  assert.ok(built.site.messages.some((message) => message.id === poem.id), 'an unsigned reader text stays');
+});
+
+test('links name the printed page: a spread before the sheet shifts it, a spread sheet gets two numbers', () => {
+  const page = (sheet: number, n: number): PublicPagerMessage =>
+    ({ id: `2000-01-0066-p${sheet}-${n}`, year: 2000, number: '01', serial: '0066', date: '2000-01-05', sheet, from: 'BAD', to: [], text: `Сообщение ${n}.` });
+  const spreads = { '2000-01-0066': [8], '2000-02-0067': [3] };
+  const built = buildPagerSite([page(5, 1), page(8, 2), page(12, 3)], rules, authors, { spreads });
+  assert.deepEqual(built.site.spreads, { '2000-01-0066': [8] }, 'only issues shown in the feed');
+  const where = preparePager(built.site).messages.map(({ sheet, page, pages }) => ({ sheet, page, pages }));
+  assert.deepEqual(where, [
+    { sheet: 5, page: 5, pages: '5' },
+    { sheet: 8, page: 8, pages: '8–9' },
+    { sheet: 12, page: 13, pages: '13' },
+  ]);
+  assert.equal(model.messages[0].page, model.messages[0].sheet, 'no spreads, no shift');
+});
+
+test('search examples are only names that open a profile', () => {
+  assert.deepEqual(model.featured, []);
+  assert.deepEqual(preparePager({ ...site, featured: ['BAD', 'Киса', 'Нет такого'] }).featured, ['BAD']);
 });
 
 test('a message recognized twice on one page is shown once; reprints and other ads stay', () => {
