@@ -3,7 +3,7 @@
 // aliases, joint signatures (one message in each author's profile), shared signatures (no profile).
 // Only 'unique' nicks get a profile. Addressees stay as printed and are never aggregated here.
 import { normalizeName } from './authorNames.ts';
-import { buildNicks, nickKey, signatureAuthors, type NickRules } from './pagerNicks.ts';
+import { buildNicks, nickCore, nickKey, signatureAuthors, type NickRules } from './pagerNicks.ts';
 
 export type PublicPagerMessage = {
   id: string;
@@ -24,7 +24,8 @@ export type SiteMessage = { id: string; from?: string; to?: string[]; text: stri
 export type SiteArticle = { issue: string; page: number; kind: string; title: string | null };
 // staff: one of the editorial (NickRules.staff); only they have remarks on readers' messages.
 // bylines: other signatures of the same person in the newspaper (NickRules.writers).
-export type SiteProfile = { key: string; name: string; spellings: string[]; messages: number; first: string; last: string; articles: SiteArticle[]; bylines?: string[]; staff?: true };
+// aka: aliases never used as a signature («Т.Т.» for ТТ): addressees and mentions still find them.
+export type SiteProfile = { key: string; name: string; spellings: string[]; messages: number; first: string; last: string; articles: SiteArticle[]; bylines?: string[]; aka?: string[]; staff?: true };
 // dates: issue key («2000-01-0066») → its date. spreads: issue key → its sheets scanned as two-page
 // spreads (as the reader detects them), so a link can name the printed page and not the sheet.
 // featured: profile names shown as search examples (scripts/pager-site.mjs picks them).
@@ -109,6 +110,10 @@ export function buildPagerSite(all: PublicPagerMessage[], rules: NickRules, auth
   const writers = new Map(Object.entries(rules.writers ?? {}).map(([nick, names]) => [nickKey(nick, rules), names]));
   const profiles: SiteProfile[] = nicks.map((nick) => {
     const bylines = writers.get(nick.key) ?? [];
+    const signed = new Set([nick.name, ...nick.spellings].map((spelling) => normalizeName(spelling)));
+    const aka = Object.entries(rules.aliases ?? {})
+      .filter(([spelling, target]) => nickKey(target, rules) === nick.key && !signed.has(normalizeName(nickCore(spelling))))
+      .map(([spelling]) => spelling);
     const keys = new Set([nick.key, ...nick.spellings.map((spelling) => normalizeName(spelling)), ...bylines.map((name) => normalizeName(name))]);
     const seen = new Set<string>();
     const articles = [...keys]
@@ -131,6 +136,7 @@ export function buildPagerSite(all: PublicPagerMessage[], rules: NickRules, auth
       last: nick.last,
       articles,
       ...(bylines.length ? { bylines } : {}),
+      ...(aka.length ? { aka } : {}),
       ...(staff.has(nick.key) ? { staff: true as const } : {}),
     };
   });
