@@ -32,6 +32,14 @@ test('Latin nicks are found by how they sound in either alphabet', () => {
   assert.deepEqual(searchNames(names, 'svetka').map((n) => n.name), ['Svetk@']);
 });
 
+test('Latin nicks are found whatever the case of the query or of the name', () => {
+  const nicks = [entry('BAD', normalizeName('BAD')), entry('DJ SASH!', normalizeName('DJ SASH!')), entry('Hot Tina', normalizeName('Hot Tina'))];
+  for (const query of ['bad', 'BAD', 'Bad', 'bAd']) assert.deepEqual(searchNames(nicks, query).map((n) => n.name), ['BAD'], query);
+  assert.deepEqual(searchNames(nicks, 'dj sash').map((n) => n.name), ['DJ SASH!']);
+  assert.deepEqual(searchNames(nicks, 'HOT TINA').map((n) => n.name), ['Hot Tina']);
+  assert.deepEqual(searchNames(nicks, 'hot tina').map((n) => n.name), ['Hot Tina']);
+});
+
 test('one typo is forgiven in words of five letters or more', () => {
   assert.deepEqual(searchNames(names, 'васисулий').map((n) => n.name), ['Васисуалий ЛОПАТА']);
   assert.deepEqual(searchNames(names, 'кохн'), []);
