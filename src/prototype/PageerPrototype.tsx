@@ -462,8 +462,9 @@ const CSS = `
 .pg-thread-box h3 { font-size: 22px; }
 .pg-permalink { margin-left: 8px; color: var(--muted); font-weight: 400; }
 .pg-permalink:hover { color: var(--ink); }
-.pg-bubble { max-width: min(560px, 88%); padding: 10px 14px; border: 1px solid var(--ink); background: #fff; }
-.pg-bubble.mine { justify-self: end; background: var(--ink); color: var(--paper); }
+/* The profile owner's messages on the left, the other side's replies on the right. */
+.pg-bubble { justify-self: end; max-width: min(560px, 88%); padding: 10px 14px; border: 1px solid var(--ink); background: #fff; }
+.pg-bubble.mine { justify-self: start; background: var(--ink); color: var(--paper); }
 .pg-bubble.mine .pg-muted, .pg-bubble.mine a { color: #c9cabe; }
 .pg-bubble p { margin-top: 4px; line-height: 1.45; overflow-wrap: anywhere; }
 .pg-switcher { position: fixed; z-index: 50; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 6px; border-radius: 999px; background: #ff3d7f; color: #fff; box-shadow: 0 8px 24px rgb(0 0 0 / .25); font: 600 14px system-ui, sans-serif; }
