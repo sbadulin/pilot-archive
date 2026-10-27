@@ -292,6 +292,17 @@ test('a remark in brackets in another message is the profile\'s comment, not a m
   assert.equal(profileOf(model, 'Дима (г. Комсомольск)'), null, 'a town in brackets is not a nick');
 });
 
+test('an alias never signed still finds the profile as an addressee', () => {
+  const own = at(1, 'ТТ', [], 'Привет всем!');
+  const to = at(2, 'Kurt', ['Т.Т.'], 'Т.Т., спасибо за ответ!');
+  const built = buildPagerSite([own, to], { ...rules, aliases: { ...rules.aliases, 'Т.Т.': 'ТТ' } }, authors).site;
+  const tt = built.profiles.find((profile) => profile.name === 'ТТ')!;
+  assert.deepEqual([tt.aka, tt.spellings], [['Т.Т.'], []]);
+  const ready = preparePager(built);
+  assert.equal(profileOf(ready, 'Т.Т.'), tt.key);
+  assert.deepEqual(mentionsOf(ready, tt.key).map((message) => message.text), [to.text]);
+});
+
 test("a nick's bylines in the newspaper bring their articles", () => {
   const own = at(1, 'ПТ', [], 'Уже начал!');
   const index = { names: [{ key: 'павел трутнев', credits: [{ issue: '2000-31-0096', page: 3, kind: 'article', title: 'Кино' }] }] };

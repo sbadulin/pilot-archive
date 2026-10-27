@@ -36,7 +36,7 @@ export function preparePager(site: PagerSite): PagerModel {
   // typed route «#pager/bad» or an addressee «bad» finds BAD.
   for (const profile of site.profiles) if (!byName.has(foldCase(profile.key))) byName.set(foldCase(profile.key), profile.key);
   for (const profile of site.profiles) {
-    for (const name of [profile.name, ...profile.spellings]) {
+    for (const name of [profile.name, ...profile.spellings, ...(profile.aka ?? [])]) {
       const key = foldCase(normalizeName(name));
       if (key && !byName.has(key)) byName.set(key, profile.key);
     }
@@ -46,7 +46,7 @@ export function preparePager(site: PagerSite): PagerModel {
   for (const message of messages) message.toKeys = message.to.map((name) => profileOf(model, name));
   const own = model.own;
   for (const message of messages) for (const key of message.nicks) own.set(key, [...(own.get(key) ?? []), message]);
-  model.names = [...new Set(site.profiles.flatMap((profile) => [profile.name, ...profile.spellings]))];
+  model.names = [...new Set(site.profiles.flatMap((profile) => [profile.name, ...profile.spellings, ...(profile.aka ?? [])]))];
   model.featured = (site.featured ?? []).filter((name) => profiles.has(byName.get(foldCase(normalizeName(name))) ?? ''));
   return model;
 }
@@ -84,7 +84,7 @@ function namePattern(name: string): RegExp {
 // ПТ)». ПТ and ТТ of the editorial often did. A name alone in brackets («Рыженький (ПТ)») is not one.
 const remarkPattern = (names: string[]) =>
   new RegExp(`\\([^()]*?[–—-]+\\s*(?:${names.map((name) => escapeRegExp(name.trim())).join('|')})\\s*\\)`, 'giu');
-const profileNames = (profile: SiteProfile) => [...new Set([profile.name, ...profile.spellings].filter((name) => name.trim()))];
+const profileNames = (profile: SiteProfile) => [...new Set([profile.name, ...profile.spellings, ...(profile.aka ?? [])].filter((name) => name.trim()))];
 
 /** Messages of other readers with a remark by the profile, oldest first; only the editorial made them. */
 export function remarksOf(model: PagerModel, key: string): FeedMessage[] {
