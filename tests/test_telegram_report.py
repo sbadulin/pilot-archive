@@ -71,9 +71,69 @@ class ReportTests(unittest.TestCase):
         partial = record('/archive/1.pdf', status=206)
         partial['request']['headers']['Range'] = ['bytes=100-200']
         report.add_record(rows, partial)
+        report.add_record(rows, record('/archive/manifest.json', status=304))
+        report.finish_day(rows[day])
         self.assertEqual(rows[day]['views'], 2)
-        self.assertEqual(len(rows[day]['visitors']), 1)
+        self.assertEqual(rows[day]['visitors'], 1)
         self.assertEqual(rows[day]['pdf_opens'], 2)
+
+    def test_html_only_identities_and_redirects_are_not_visitors(self):
+        day = date(2026, 10, 15)
+        rows = {day: report.blank_day()}
+        scanner = record()
+        scanner['request']['remote_ip'] = '198.51.100.7'
+        report.add_record(rows, scanner)
+        report.add_record(rows, record('/', status=308))
+        report.add_record(rows, record('/archive/manifest.json'))
+        report.finish_day(rows[day])
+        self.assertEqual(rows[day]['views'], 0)
+        self.assertEqual(rows[day]['visitors'], 0)
+        self.assertNotIn('page_loads', rows[day])
+        self.assertNotIn('manifest_readers', rows[day])
+
+    def test_scanner_user_agents_are_bots_but_current_browsers_are_not(self):
+        for agent in ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36',
+                      'Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                      'niche-gap-finder/1.0; startup-tracker', 'Mozilla/5.0 (compatible; VertepBot/1.0)',
+                      'BackupLand/1.0 (+https://backupland.com) Domain check',
+                      'Hello from Palo Alto Networks, find out more about our scans', 'Mozilla/5.0 (compatible; iskalo.ru-bot)'):
+            self.assertTrue(report.BOTS.search(agent), agent)
+        for agent in ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+                      'Mozilla/5.0 (X11; CrOS x86_64 16328.65.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+                      'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1',
+                      'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/178.0.0.0 Mobile Safari/537.36'):
+            self.assertIsNone(report.BOTS.search(agent), agent)
+
+    def test_adult_confirmations_count_distinct_identities(self):
+        day = date(2026, 10, 15)
+        rows = {day: report.blank_day()}
+        report.add_record(rows, record('/_stats/adult', status=204))
+        report.add_record(rows, record('/_stats/adult', status=204))
+        report.add_record(rows, record('/_stats/adult', status=404))
+        other = record('/_stats/adult', status=204)
+        other['request']['remote_ip'] = '192.0.2.2'
+        report.add_record(rows, other)
+        self.assertEqual(len(rows[day]['adults']), 2)
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            row = report.finish_day(rows[day])
+            self.assertEqual(row['adults'], 2)
+            row['complete'] = True
+            report.atomic_json(state / f'days/{day}.json', row)
+            self.assertIn('Подтвердили 18+: 2', report.render('day', day, date(2026, 10, 16), state))
+
+    def test_state_saved_before_adult_tracking_still_renders(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            old = {'visitors': 3, 'searchers': 1, 'views': 5, 'pdf_opens': 2, 'searches': 1, 'selections': 0,
+                   'no_results': 0, 'queries': {'автор': 1}, 'authors': {}, 'empty_queries': {}, 'issues': {},
+                   'complete': True, 'date': '2026-10-15'}
+            report.atomic_json(state / 'days/2026-10-15.json', old)
+            report.atomic_json(state / 'days/2026-10-16.json', dict(old, adults=1, date='2026-10-16'))
+            message = report.render('week', date(2026, 10, 12), date(2026, 10, 19), state)
+            self.assertIn('Подтвердили 18+: 1', message)
+            self.assertIn('Открытия сайта: 10', message)
+            self.assertIn('Посетители: 3', report.render('day', date(2026, 10, 15), date(2026, 10, 16), state))
 
     def test_author_events_only_count_the_local_endpoint(self):
         day = date(2026, 10, 15)
@@ -92,12 +152,12 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(rows[day]['issues']['№ 01 (0066), 2000'], 1)
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory)
-            empty = report.blank_day()
-            empty.update(visitors=0, searchers=0, complete=True)
+            empty = report.finish_day(report.blank_day())
+            empty['complete'] = True
             report.atomic_json(state / f'days/{day}.json', empty)
             self.assertIsNone(report.render('day', day, date(2026, 10, 16), state))
-            row = rows[day]
-            row.update(visitors=0, searchers=0, complete=True)
+            row = report.finish_day(rows[day])
+            row['complete'] = True
             report.atomic_json(state / f'days/{day}.json', row)
             self.assertIn('№ 01 (0066), 2000 — 1', report.render('day', day, date(2026, 10, 16), state))
 
@@ -108,7 +168,7 @@ class ReportTests(unittest.TestCase):
             logs.mkdir()
             report.atomic_json(state / 'started.json', {'started_at': '2026-10-15T00:00:00+03:00'})
             log = logs / 'pilot-archive.log'
-            log.write_text(json.dumps(record()) + '\n')
+            log.write_text(json.dumps(record()) + '\n' + json.dumps(record('/archive/manifest.json')) + '\n')
             now = datetime(2026, 10, 16, 9, tzinfo=report.MOSCOW)
             report.collect(logs, state, now)
             snapshot = (state / 'days/2026-10-15.json').read_text()
@@ -122,7 +182,7 @@ class ReportTests(unittest.TestCase):
     def test_partial_month_and_deduplicated_sending(self):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory)
-            row = report.blank_day()
+            row = report.finish_day(report.blank_day())
             row.update(visitors=2, searchers=1, views=2, complete=False)
             report.atomic_json(state / 'days/2026-10-15.json', row)
             message = report.render('month', date(2026, 10, 1), date(2026, 11, 1), state)
@@ -140,7 +200,7 @@ class ReportTests(unittest.TestCase):
     def test_uncertain_send_is_not_retried_automatically(self):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory)
-            row = report.blank_day()
+            row = report.finish_day(report.blank_day())
             row.update(visitors=0, searchers=0, views=1, complete=True)
             report.atomic_json(state / 'days/2026-10-15.json', row)
             config = state / 'config.json'
