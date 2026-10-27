@@ -1,7 +1,9 @@
 // PROTOTYPE — throwaway. Three variants of the «Pageer» section, switchable via ?variant=A|B|C
 // and the floating bar at the bottom (← → keys). Data: hand-picked sample (pageerSample.ts).
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, CornerDownRight, FileText, MessageSquare, MessagesSquare, AtSign } from 'lucide-react';
+import { useEffect, useId, useMemo, useState } from 'react';
+import { matchesQuery, MIN_QUERY } from '../authorSearch';
+import { normalizeName } from '../authorNames';
+import { ArrowLeft, ArrowRight, CornerDownRight, FileText, MessageSquare, MessagesSquare, AtSign, Search, X } from 'lucide-react';
 import { byNick, dateLabel, issueLabel, mentions, messages, nickOf, profiles, type PagerMessage } from './pageerSample';
 
 const VARIANTS = [
@@ -156,19 +158,76 @@ function Post({ msg, onOpen }: { msg: PagerMessage; onOpen: (nick: string) => vo
   );
 }
 
+// Search like the authors search (same matching: word starts, one typo, Latin lookalikes), but over
+// pager signatures and addressees. A signature with a profile opens it; an addressee filters the feed.
+// Addressees that look like a real «Имя Фамилия» are not searchable (152-ФЗ: no gathering a person's greetings).
+const realName = /^[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+(\s|$)/;
+type Hit = { kind: 'author' | 'to'; name: string; count: number };
+const searchable: Hit[] = (() => {
+  const authors = new Map<string, number>(), to = new Map<string, number>();
+  for (const msg of messages) {
+    if (msg.nick) authors.set(msg.nick, (authors.get(msg.nick) ?? 0) + 1);
+    for (const name of msg.to) if (!realName.test(name)) to.set(name, (to.get(name) ?? 0) + 1);
+  }
+  return [
+    ...[...authors].map(([name, count]) => ({ kind: 'author' as const, name, count })),
+    ...[...to].filter(([name]) => !authors.has(nickOf(name) ?? '')).map(([name, count]) => ({ kind: 'to' as const, name, count })),
+  ];
+})();
+const keysOf = (hit: Hit) => [normalizeName(hit.name), ...(hit.kind === 'author' ? profiles[hit.name]?.aliases ?? [] : []).map(normalizeName)];
+
+function PagerSearch({ onAddressee }: { onAddressee: (name: string) => void }) {
+  const [query, setQuery] = useState('');
+  const listId = useId();
+  const matches = query.trim().length >= MIN_QUERY
+    ? searchable.filter((hit) => matchesQuery(query, keysOf(hit))).sort((a, b) => (a.kind === b.kind ? b.count - a.count : a.kind === 'author' ? -1 : 1)).slice(0, 8)
+    : [];
+  const choose = (hit: Hit) => { setQuery(''); if (hit.kind === 'author') openProfile(hit.name); else onAddressee(hit.name); };
+  return (
+    <section className="author-search pg-search" aria-label="Поиск по пейджеру">
+      <div className="author-search-field">
+        <Search size={20} aria-hidden="true" />
+        <input type="search" autoComplete="off" placeholder="Ник автора или адресата" value={query} role="combobox"
+          aria-expanded={matches.length > 0} aria-controls={listId}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => { if (event.key === 'Enter' && matches[0]) choose(matches[0]); }} />
+      </div>
+      {matches.length > 0 && (
+        <ul className="author-suggestions" id={listId} role="listbox">
+          {matches.map((hit) => (
+            <li key={hit.kind + hit.name} role="option" aria-selected={false}>
+              <button type="button" onClick={() => choose(hit)}>
+                <span>{hit.name}</span>
+                <span className="author-count">{hit.kind === 'author' ? `автор · ${hit.count}` : `адресат · ${hit.count}`}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {query.trim().length >= MIN_QUERY && !matches.length && <p className="author-empty">Такого ника среди авторов и адресатов нет.</p>}
+    </section>
+  );
+}
+
 // A — a single-column timeline, oldest first, with a year rail on the left.
 function VariantA() {
   const { nick, tab, with: withNick } = useRoute();
   const setNick = (next: string) => openProfile(next);
+  const [addressee, setAddressee] = useState<string | null>(null);
   if (nick) return <div className="pg-a"><aside className="pg-rail"><Intro /></aside><Profile nick={nick} onOpen={setNick} onClose={closeProfile} tab={tab} onTab={(next) => openProfile(nick, next)} withNick={withNick} /></div>;
   const months = new Map<string, PagerMessage[]>();
-  for (const msg of sorted) months.set(msg.date.slice(0, 7), [...(months.get(msg.date.slice(0, 7)) ?? []), msg]);
+  const shown = addressee ? sorted.filter((msg) => msg.to.some((t) => t === addressee || (nickOf(t) && nickOf(t) === nickOf(addressee)))) : sorted;
+  for (const msg of shown) months.set(msg.date.slice(0, 7), [...(months.get(msg.date.slice(0, 7)) ?? []), msg]);
   return (
     <div className="pg-a">
       <aside className="pg-rail">
         <Intro />
+        <PagerSearch onAddressee={setAddressee} />
       </aside>
       <div className="pg-feed">
+        {addressee && (
+          <p className="pg-filter"><span>Сообщения для <b>{addressee}</b>: {shown.length}</span> <button onClick={() => setAddressee(null)}><X size={14} /> сбросить</button></p>
+        )}
         {[...months].map(([month, list]) => (
           <section key={month} id={`m-${month}`}>
             <h3 className="pg-month">{new Date(`${month}-15`).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</h3>
@@ -352,6 +411,9 @@ const CSS = `
 .pg-rail { position: sticky; top: 24px; align-self: start; display: grid; gap: 24px; padding-top: 8px; }
 .pg-month { position: sticky; top: 0; z-index: 1; padding: 10px 0; background: var(--paper); border-bottom: 5px solid var(--ink); font-size: 26px; }
 .pg-month::first-letter { text-transform: uppercase; }
+.pg-search { margin: 0; width: 100%; }
+.pg-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 14px; background: var(--accent); }
+.pg-filter button { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; border: 1px solid var(--ink); background: transparent; padding: 4px 10px; font-size: 14px; }
 .pg-cta { justify-self: start; padding: 10px 16px; border: 1px solid var(--ink); background: transparent; font-weight: 500; }
 .pg-cta:hover { background: var(--ink); color: var(--paper); }
 /* profile */
