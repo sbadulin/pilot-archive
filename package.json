@@ -20,6 +20,9 @@
     "archive:migrate": "node --experimental-strip-types scripts/migrate-published-to-archive.mjs",
     "censor": "node --experimental-strip-types scripts/censor-issue.mjs",
     "risks:scan": "node --experimental-strip-types scripts/scan-risks.mjs",
+    "pager:index": "node --experimental-strip-types scripts/pager-index.mjs",
+    "pager:public": "node --experimental-strip-types scripts/pager-public.mjs",
+    "pager:nicks": "node --experimental-strip-types scripts/pager-nicks.mjs",
     "build:all": "npm run build && npm run build:admin",
     "check": "npm run typecheck && npm test && npm run test:reports && npm run verify:archive && npm run build:all && node scripts/verify-build.mjs",
     "test:browser": "playwright test"
