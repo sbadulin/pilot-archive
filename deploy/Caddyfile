@@ -14,7 +14,7 @@ pilot-archive.ru {
         format json
     }
     @authorStats {
-        path /_stats/author /_stats/adult
+        path /_stats/author /_stats/adult /_stats/pager
         method GET
     }
     header @authorStats Cache-Control "no-store"
