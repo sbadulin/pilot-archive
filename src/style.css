@@ -369,9 +369,12 @@ button, a { transition: background-color .15s, color .15s, border-color .15s; }
 }
 @media (max-width: 540px) {
   .shell { width: calc(100% - 32px); }
-  .site-header { gap: 23px; height: 74px; }
-  .site-header nav { gap: 14px; font-size: 13px; }
+  .site-header { gap: 14px; height: 74px; }
+  /* Four sections and the 18+ badge must fit a phone: the menu scrolls inside itself, never the page. */
+  .site-header nav { gap: 14px; font-size: 13px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .site-header nav a { flex: none; }
   .header-add { font-size: 12px; gap: 6px; padding: 10px; }
+  .header-add span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .header-add svg { width: 15px; }
   .masthead { margin-top: 16px; display: block; padding: 25px 22px 20px; border-bottom-width: 4px; }
   .masthead-brand { padding: 0 8px 25px; display: block; }
