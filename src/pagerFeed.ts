@@ -127,6 +127,33 @@ export function dialogsOf(model: PagerModel, key: string, mentions = mentionsOf(
   );
 }
 
+// --- Part of a message addressed to someone ---
+
+// First place a name opens a sentence (a greeting: «… кстати. Туса, я там…», «99. Ice!»), case aside;
+// -1 when absent. A name inside a sentence («спасибо BADy, Rat и Хавчу») is not a greeting.
+const findName = (text: string, name: string) => {
+  const match = new RegExp(`(^|[.!?…)»]\\s+|\\n\\s*|^\\d+\\.\\s+)(${escapeRegExp(name.trim())})(?![\\p{L}\\p{N}]{3})`, 'iu').exec(text);
+  return match ? match.index + match[1].length : -1;
+};
+
+/**
+ * The part of a message addressed to `key`: from where its name appears in the text to where the
+ * next addressee's name starts («Туса, я там везде стоял. Спорти! …» → «Туса, я там везде стоял.»).
+ * Null when the name isn't found or the whole message is for them: show it all then.
+ */
+export function excerptFor(model: PagerModel, message: FeedMessage, key: string): string | null {
+  const profile = model.profiles.get(key);
+  if (!profile) return null;
+  const own = [profile.name, ...profile.spellings, ...message.to.filter((_, i) => message.toKeys[i] === key)];
+  const starts = own.map((name) => findName(message.text, name)).filter((at) => at >= 0);
+  if (!starts.length) return null;
+  const start = Math.min(...starts);
+  const others = message.to.filter((_, i) => message.toKeys[i] !== key);
+  const end = Math.min(message.text.length, ...others.map((name) => findName(message.text, name)).filter((at) => at > start));
+  const part = message.text.slice(start, end).trim();
+  return part && part !== message.text.trim() ? part : null;
+}
+
 // --- Search ---
 
 // «Имя Фамилия» at the start of an addressee: a real person, never searchable.

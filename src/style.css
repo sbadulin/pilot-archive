@@ -574,6 +574,9 @@ button, a { transition: background-color .15s, color .15s, border-color .15s; }
 .pg-bubble { justify-self: end; max-width: min(560px, 88%); padding: 10px 14px; border: 1px solid var(--ink); background: #fff; }
 .pg-bubble.mine { justify-self: start; background: var(--ink); color: var(--paper); }
 .pg-bubble-meta { color: var(--muted); font-size: 13px; }
+.pg-whole { border: 0; background: none; padding: 0; font: inherit; font-size: 13px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.pg-bubble.mine .pg-whole { color: #c9cabe; }
+.pg-whole:hover { color: inherit; }
 .pg-bubble.mine .pg-bubble-meta { color: #c9cabe; }
 .pg-bubble p { margin-top: 4px; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-line; }
 @media (max-width: 900px) {

@@ -5,6 +5,7 @@ import {
   addressedTo,
   articlesOf,
   dialogsOf,
+  excerptFor,
   isSearchableAddressee,
   mentionsOf,
   monthLabel,
@@ -160,4 +161,28 @@ test('search: nicks open profiles, addressees filter, real names are not searcha
 
 test('month headings start with a capital letter', () => {
   assert.equal(monthLabel('2000-03'), 'Март 2000');
+});
+
+test('a dialog shows only the part of a message addressed to the other side', () => {
+  const messages: PublicPagerMessage[] = [
+    at(1, 'Спорти', ['F@d', 'BAD'], 'F@d, ты не ответил. Испугался? BAD, с днем, что ли?'),
+    at(2, 'Туса', ['BAD'], 'Bad, не ты ль стоял на граффити позади меня?'),
+    at(3, 'BAD', ['Вася Хмурый', 'Туса', 'Спорти'], 'Вася Хмурый! Пусть тебя мама родит обратно. Туса, я там везде стоял (в кепке с черепушкой). Спорти! Томас Манн весьма кстати.'),
+    at(4, 'BAD', ['Спорти'], 'Спорти, привет.'),
+    at(5, 'Туса', ['BAD', 'Rat'], 'Огромные извинения и большое спасибо BADy, Rat и Хавчу. Такого больше не повторится.'),
+  ];
+  const small = preparePager(buildPagerSite(messages, {}, { names: [] }).site);
+  const bad = profileOf(small, 'BAD')!;
+  const sporti = profileOf(small, 'Спорти')!;
+  const tusa = profileOf(small, 'Туса')!;
+  const byId = new Map(small.messages.map((m) => [m.id, m]));
+  const third = byId.get(messages[2].id)!;
+  assert.equal(excerptFor(small, third, sporti), 'Спорти! Томас Манн весьма кстати.');
+  assert.equal(excerptFor(small, third, tusa), 'Туса, я там везде стоял (в кепке с черепушкой).');
+  assert.equal(excerptFor(small, byId.get(messages[0].id)!, bad), 'BAD, с днем, что ли?');
+  // The whole message is addressed to the other side: nothing to cut.
+  assert.equal(excerptFor(small, byId.get(messages[3].id)!, sporti), null);
+  assert.equal(excerptFor(small, byId.get(messages[1].id)!, bad), null);
+  // A nick in the middle of a sentence («спасибо BADy, Rat и Хавчу») isn't a greeting: show it all.
+  assert.equal(excerptFor(small, byId.get(messages[4].id)!, bad), null);
 });

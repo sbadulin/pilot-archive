@@ -11,6 +11,7 @@ import {
   articlesOf,
   dateLabel,
   dialogsOf,
+  excerptFor,
   issueParts,
   mentionsOf,
   monthLabel,
@@ -244,18 +245,36 @@ function Dialogs({model, profile, dialogs, only}: {model: PagerModel; profile: S
                 </a>
               )}
             </h3>
-            {dialog.messages.map((message) => (
-              <div key={message.id} className={`pg-bubble${message.nicks.includes(profile.key) ? " mine" : ""}`}>
-                <span className="pg-bubble-meta">
-                  {message.from ?? "Без подписи"} · <Where message={message} />
-                </span>
-                <p>{message.text}</p>
-              </div>
-            ))}
+            {dialog.messages.map((message) => {
+              const mine = message.nicks.includes(profile.key);
+              // One coupon a week greeted several people: show only the part for the other side.
+              const part = excerptFor(model, message, mine ? dialog.other : profile.key);
+              return (
+                <div key={message.id} className={`pg-bubble${mine ? " mine" : ""}`}>
+                  <span className="pg-bubble-meta">
+                    {message.from ?? "Без подписи"} · <Where message={message} />
+                  </span>
+                  <BubbleText text={message.text} part={part} />
+                </div>
+              );
+            })}
           </section>
         );
       })}
     </div>
+  );
+}
+
+function BubbleText({text, part}: {text: string; part: string | null}) {
+  const [whole, setWhole] = useState(false);
+  if (!part || whole) return <p>{text}</p>;
+  return (
+    <p>
+      {part}{" "}
+      <button type="button" className="pg-whole" onClick={() => setWhole(true)}>
+        всё сообщение
+      </button>
+    </p>
   );
 }
 
