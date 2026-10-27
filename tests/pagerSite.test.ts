@@ -289,6 +289,15 @@ test('a remark in brackets in another message is the profile\'s comment, not a m
   assert.deepEqual(parsePagerRoute('#pager/ПТ/remarks'), { nick: 'ПТ', tab: 'remarks', with: null });
 });
 
+test("a nick's bylines in the newspaper bring their articles", () => {
+  const own = at(1, 'ПТ', [], 'Уже начал!');
+  const index = { names: [{ key: 'павел трутнев', credits: [{ issue: '2000-31-0096', page: 3, kind: 'article', title: 'Кино' }] }] };
+  const built = buildPagerSite([own], { ...rules, writers: { ПТ: ['Павел ТРУТНЕВ'] } }, index).site;
+  const pt = built.profiles.find((profile) => profile.name === 'ПТ')!;
+  assert.deepEqual(pt.bylines, ['Павел ТРУТНЕВ']);
+  assert.deepEqual(pt.articles.map((article) => article.title), ['Кино']);
+});
+
 test('adjectives before a nick describe the same person', () => {
   assert.ok(withAdjectives('Умиротворенный BAD', 'BAD'));
   assert.ok(withAdjectives('Мелированный Виталя Мэнсон', 'Виталя Мэнсон'));

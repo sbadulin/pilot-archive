@@ -152,7 +152,8 @@ export type Nick = { key: string; name: string; spellings: string[]; class: Nick
 // joint — совместная подпись → её авторы («ICEPAC&Liga-X» → ICEPAC и Liga-X): сообщение идёт в каждый профиль.
 // shared — подписи, под которыми пишут разные люди: сообщения остаются в ленте, профиля нет.
 // staff: nicks of the editorial who wrote in the pager and commented on readers' messages.
-export type NickRules = { aliases?: Record<string, string>; distinct?: string[][]; joint?: Record<string, string[]>; shared?: string[]; staff?: string[] };
+// writers: nick → the same person's bylines in the newspaper, for «В газете».
+export type NickRules = { aliases?: Record<string, string>; distinct?: string[][]; joint?: Record<string, string[]>; shared?: string[]; staff?: string[]; writers?: Record<string, string[]> };
 
 const aliasOf = (core: string, rules: NickRules) =>
   Object.entries(rules.aliases ?? {}).find(([spelling]) => normalizeName(spelling) === normalizeName(core))?.[1] ?? null;

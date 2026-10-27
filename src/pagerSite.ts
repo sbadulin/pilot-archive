@@ -23,7 +23,8 @@ export type PublicPagerMessage = {
 export type SiteMessage = { id: string; from?: string; to?: string[]; text: string; nicks?: string[] };
 export type SiteArticle = { issue: string; page: number; kind: string; title: string | null };
 // staff: one of the editorial (NickRules.staff); only they have remarks on readers' messages.
-export type SiteProfile = { key: string; name: string; spellings: string[]; messages: number; first: string; last: string; articles: SiteArticle[]; staff?: true };
+// bylines: other signatures of the same person in the newspaper (NickRules.writers).
+export type SiteProfile = { key: string; name: string; spellings: string[]; messages: number; first: string; last: string; articles: SiteArticle[]; bylines?: string[]; staff?: true };
 // dates: issue key («2000-01-0066») → its date. spreads: issue key → its sheets scanned as two-page
 // spreads (as the reader detects them), so a link can name the printed page and not the sheet.
 // featured: profile names shown as search examples (scripts/pager-site.mjs picks them).
@@ -104,8 +105,11 @@ export function buildPagerSite(all: PublicPagerMessage[], rules: NickRules, auth
   for (const entry of authors.names) {
     for (const key of entry.keys ?? [entry.key]) byKey.set(key, [...(byKey.get(key) ?? []), ...entry.credits]);
   }
+  // Bylines in the newspaper of a pager nick (rules.writers): «ПТ» signed articles «Павел ТРУТНЕВ».
+  const writers = new Map(Object.entries(rules.writers ?? {}).map(([nick, names]) => [nickKey(nick, rules), names]));
   const profiles: SiteProfile[] = nicks.map((nick) => {
-    const keys = new Set([nick.key, ...nick.spellings.map((spelling) => normalizeName(spelling))]);
+    const bylines = writers.get(nick.key) ?? [];
+    const keys = new Set([nick.key, ...nick.spellings.map((spelling) => normalizeName(spelling)), ...bylines.map((name) => normalizeName(name))]);
     const seen = new Set<string>();
     const articles = [...keys]
       .flatMap((key) => byKey.get(key) ?? [])
@@ -125,6 +129,7 @@ export function buildPagerSite(all: PublicPagerMessage[], rules: NickRules, auth
       first: nick.first,
       last: nick.last,
       articles,
+      ...(bylines.length ? { bylines } : {}),
       ...(staff.has(nick.key) ? { staff: true as const } : {}),
     };
   });

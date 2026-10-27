@@ -341,6 +341,11 @@ function Profile({model, profile, route, issues}: {model: PagerModel; profile: S
         <CopyLink />
       </div>
       {profile.spellings.length > 0 && <p className="pg-muted">Также подписывался: {profile.spellings.join(", ")}</p>}
+      {profile.bylines && (
+        <p className="pg-muted">
+          В газете: <a href={profileHref(profile, "articles")}>{profile.bylines.join(", ")}</a>
+        </p>
+      )}
       <div className="pg-stats">
         <Stat count={own.length} forms={["сообщение", "сообщения", "сообщений"]} />
         <Stat count={about.length} forms={["упоминание", "упоминания", "упоминаний"]} />
