@@ -84,6 +84,10 @@ function namePattern(name: string): RegExp {
 // ПТ)». ПТ and ТТ of the editorial often did. A name alone in brackets («Рыженький (ПТ)») is not one.
 const remarkPattern = (names: string[]) =>
   new RegExp(`\\([^()]*?[–—-]+\\s*(?:${names.map((name) => escapeRegExp(name.trim())).join('|')})\\s*\\)`, 'giu');
+// The newspaper's own name in a text («читателям «Пилота»», «письмо в ПП») is the paper, not its
+// editorial («Пилоты»): such names only find addressees.
+const NEWSPAPER = /^(?:пилот|пп)$/iu;
+const TITLE = /«\s*(?:Пилот|ПП)[^»]*»/giu;
 const profileNames = (profile: SiteProfile) => [...new Set([profile.name, ...profile.spellings, ...(profile.aka ?? [])].filter((name) => name.trim()))];
 
 /** Messages of other readers with a remark by the profile, oldest first; only the editorial made them. */
@@ -114,14 +118,14 @@ export function mentionsOf(model: PagerModel, key: string): FeedMessage[] {
     })
     .sort((a, b) => b.length - a.length)
     .map((other) => new RegExp(escapeRegExp(other), 'giu'));
-  const patterns = names.map(namePattern);
+  const patterns = names.filter((name) => !NEWSPAPER.test(name.trim())).map(namePattern);
   return model.messages.filter((message) => {
     if (message.nicks.includes(key)) return false;
     if (message.toKeys.includes(key)) return true;
     const from = message.from?.trim() ?? '';
     const described = names.some((name) => withAdjectives(nickCore(from), name));
     const signature = from && !described ? [new RegExp(escapeRegExp(from), 'giu')] : [];
-    const text = [remarks, ...signature, ...longer].reduce((acc, pattern) => acc.replace(pattern, ' '), message.text);
+    const text = [remarks, TITLE, ...signature, ...longer].reduce((acc, pattern) => acc.replace(pattern, ' '), message.text);
     return patterns.some((pattern) => pattern.test(text));
   });
 }
