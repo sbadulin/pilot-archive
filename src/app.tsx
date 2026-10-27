@@ -72,7 +72,7 @@ type Screen =
   | {kind: "reader"; id: number | string; page?: number}
   | {kind: "upload"}
   | {kind: "authors"}
-  | {kind: "pageer"}; // PROTOTYPE
+  | {kind: "pager"}; // PROTOTYPE
 type Draft = {
   file: File;
   pdf: PDFDocumentProxy;
@@ -1641,8 +1641,8 @@ export default function Home() {
               issue.serial === issueMatch[3].padStart(4, "0"),
           )
         : undefined;
-      if ((hash === "#pageer" || hash.startsWith("#pageer/")) && __ADMIN__ && !isPublicSite()) {
-        setScreen({kind: "pageer"}); // PROTOTYPE
+      if ((hash === "#pager" || hash.startsWith("#pager/")) && __ADMIN__ && !isPublicSite()) {
+        setScreen({kind: "pager"}); // PROTOTYPE
       } else if (hash === "#authors" && !isPublicSite()) {
         setScreen({kind: "authors"});
       } else if (hash.startsWith("#add")) {
@@ -1733,8 +1733,8 @@ export default function Home() {
             Люди
           </a>
           {/* PROTOTYPE: admin build only, never on the public site */}
-          {__ADMIN__ && !isPublicSite() && <a href="#pageer" className={screen.kind === "pageer" ? "active" : ""}>
-            Pageer
+          {__ADMIN__ && !isPublicSite() && <a href="#pager" className={screen.kind === "pager" ? "active" : ""}>
+            Пейджер
           </a>}
           {__ADMIN__ && isCurator && (
             <a
@@ -1757,7 +1757,7 @@ export default function Home() {
         )}
         <AdultBadge />
       </header>
-      {screen.kind === "pageer" && PageerPrototype ? (
+      {screen.kind === "pager" && PageerPrototype ? (
         <Suspense fallback={null}>
           <PageerPrototype />
         </Suspense>

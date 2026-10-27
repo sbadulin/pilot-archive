@@ -1,4 +1,4 @@
-// PROTOTYPE — throwaway. Three variants of the «Pageer» section, switchable via ?variant=A|B|C
+// PROTOTYPE — throwaway. Three variants of the «Пейджер» (pager) section, switchable via ?variant=A|B|C
 // and the floating bar at the bottom (← → keys). Data: hand-picked sample (pageerSample.ts).
 import { useEffect, useId, useMemo, useState } from 'react';
 import { matchesQuery, MIN_QUERY } from '../authorSearch';
@@ -17,7 +17,7 @@ const byId = new Map(messages.map((msg) => [msg.id, msg]));
 const sorted = [...messages].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
 const pageHref = (msg: { issue: string; sheet: number }) => `#issue-${msg.issue}-p${msg.sheet}`;
 
-// Profile and tab live in the address (#pageer/BAD/dialogs), so the browser's Back works and links can be shared.
+// Profile and tab live in the address (#pager/BAD/dialogs), so the browser's Back works and links can be shared.
 type Tab = 'own' | 'about' | 'articles' | 'dialogs';
 const TABS: Tab[] = ['own', 'about', 'articles', 'dialogs'];
 function readRoute() {
@@ -34,9 +34,9 @@ function useRoute() {
   return route;
 }
 const profileHash = (nick: string, tab: Tab = 'own', withNick?: string) =>
-  `#pageer/${encodeURIComponent(nick)}${tab === 'own' && !withNick ? '' : `/${tab}`}${withNick ? `/${encodeURIComponent(withNick)}` : ''}`;
+  `#pager/${encodeURIComponent(nick)}${tab === 'own' && !withNick ? '' : `/${tab}`}${withNick ? `/${encodeURIComponent(withNick)}` : ''}`;
 const openProfile = (nick: string, tab: Tab = 'own') => { window.location.hash = profileHash(nick, tab); };
-const closeProfile = () => { window.location.hash = 'pageer'; };
+const closeProfile = () => { window.location.hash = 'pager'; };
 
 // The nick's exchanges grouped by counterpart: its messages to X and X's messages to or about it.
 function threadsOf(nick: string, aliases: string[]) {
@@ -242,7 +242,7 @@ function VariantA() {
 function Intro() {
   return (
     <div className="pg-intro">
-      <span className="black-label">Pageer</span>
+      <span className="black-label">Pager</span>
       <h2>Пейджер</h2>
       <p>Приветы, ответы и перебранки читателей «Пилота» — от первых номеров к последним. Ник с профилем — кликабельный.</p>
     </div>
