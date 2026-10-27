@@ -1,4 +1,3 @@
-import PageerPrototype from "./prototype/PageerPrototype"; // PROTOTYPE
 "use client";
 
 import {
@@ -64,6 +63,9 @@ import {
   jsonRequest,
   type Submission,
 } from "./ingestionClient";
+
+// PROTOTYPE: loaded only in the admin build, so the sample never reaches the public bundle.
+const PageerPrototype = __ADMIN__ ? lazy(() => import("./prototype/PageerPrototype")) : null;
 
 type Screen =
   | {kind: "archive"}
@@ -1639,7 +1641,7 @@ export default function Home() {
               issue.serial === issueMatch[3].padStart(4, "0"),
           )
         : undefined;
-      if (hash === "#pageer") {
+      if (hash === "#pageer" && __ADMIN__ && !isPublicSite()) {
         setScreen({kind: "pageer"}); // PROTOTYPE
       } else if (hash === "#authors" && !isPublicSite()) {
         setScreen({kind: "authors"});
@@ -1730,10 +1732,10 @@ export default function Home() {
           >
             Люди
           </a>
-          {/* PROTOTYPE */}
-          <a href="#pageer" className={screen.kind === "pageer" ? "active" : ""}>
+          {/* PROTOTYPE: admin build only, never on the public site */}
+          {__ADMIN__ && !isPublicSite() && <a href="#pageer" className={screen.kind === "pageer" ? "active" : ""}>
             Pageer
-          </a>
+          </a>}
           {__ADMIN__ && isCurator && (
             <a
               href="#authors"
@@ -1755,8 +1757,10 @@ export default function Home() {
         )}
         <AdultBadge />
       </header>
-      {screen.kind === "pageer" ? (
-        <PageerPrototype />
+      {screen.kind === "pageer" && PageerPrototype ? (
+        <Suspense fallback={null}>
+          <PageerPrototype />
+        </Suspense>
       ) : screen.kind === "upload" ? (
         __ADMIN__ ? <Upload onBack={back} /> : null
       ) : screen.kind === "authors" && isCurator ? (
