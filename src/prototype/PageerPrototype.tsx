@@ -167,10 +167,6 @@ function VariantA() {
     <div className="pg-a">
       <aside className="pg-rail">
         <Intro />
-        <nav className="pg-months">
-          {[...months.keys()].map((month) => <a key={month} href={`#m-${month}`}>{new Date(`${month}-15`).toLocaleDateString('ru-RU', { month: 'long' })}</a>)}
-        </nav>
-        <a className="pg-cta" href="#pageer/BAD">Профиль BAD →</a>
       </aside>
       <div className="pg-feed">
         {[...months].map(([month, list]) => (
@@ -354,9 +350,6 @@ const CSS = `
 /* A */
 .pg-a { display: grid; grid-template-columns: 290px minmax(0, 640px); gap: 64px; }
 .pg-rail { position: sticky; top: 24px; align-self: start; display: grid; gap: 24px; padding-top: 8px; }
-.pg-months { display: flex; flex-wrap: wrap; gap: 6px; }
-.pg-months a { padding: 4px 10px; border: 1px solid var(--ink); font-size: 14px; text-transform: capitalize; }
-.pg-months a:hover { background: var(--ink); color: var(--paper); }
 .pg-month { position: sticky; top: 0; z-index: 1; padding: 10px 0; background: var(--paper); border-bottom: 5px solid var(--ink); font-size: 26px; }
 .pg-month::first-letter { text-transform: uppercase; }
 .pg-cta { justify-self: start; padding: 10px 16px; border: 1px solid var(--ink); background: transparent; font-weight: 500; }

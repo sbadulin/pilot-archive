@@ -96,9 +96,23 @@ export const profiles: Record<string, Profile> = {
 };
 
 // Mentions: a message mentions a nick if it is an addressee or appears in the text.
+// Mentions: a message mentions a nick if it is an addressee or appears in the text. Longer nicks that
+// start with this one («Bad Girl» for «BAD») are cut out first, so they don't count; endings like
+// «BAD'a», «BADy» still do.
+const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const allNames = () => [...new Set([
+  ...Object.values(profiles).flatMap((p) => [p.nick, ...p.aliases]),
+  ...messages.flatMap((msg) => (msg.nick ? [msg.nick, msg.from] : [])),
+])];
 export const mentions = (nick: string, aliases: string[] = []) => {
   const names = [nick, ...aliases].map((n) => n.toLowerCase());
-  return messages.filter((msg) => msg.nick !== nick && (msg.to.some((t) => names.includes(t.toLowerCase())) || names.some((n) => new RegExp(`(^|[^\\p{L}])${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'iu').test(msg.text))));
+  const longer = allNames().filter((other) => names.some((n) => other.toLowerCase() !== n && other.toLowerCase().startsWith(n)))
+    .filter((other) => !names.includes(other.toLowerCase()))
+    .sort((a, b) => b.length - a.length);
+  const strip = (text: string) => longer.reduce((acc, other) => acc.replace(new RegExp(escape(other), 'giu'), ' '), text);
+  return messages.filter((msg) => msg.nick !== nick && (
+    msg.to.some((t) => names.includes(t.toLowerCase())) ||
+    names.some((n) => new RegExp(`(^|[^\\p{L}])${escape(n)}`, 'iu').test(strip(msg.text)))));
 };
 export const byNick = (nick: string) => messages.filter((msg) => msg.nick === nick);
 export const nickOf = (name: string) => {
