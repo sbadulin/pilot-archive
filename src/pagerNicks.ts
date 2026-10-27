@@ -105,10 +105,14 @@ const isGeneric = (word: string) => GENERIC.has(word.toLowerCase().replace(/ё/g
 const isAllCaps = (word: string) => /^[\p{Lu}\d@&$'-]{2,}$/u.test(word) && /\p{Lu}/u.test(word);
 const isAdjective = (word: string) => /^\p{Lu}?\p{Ll}+(?:ый|ий|ой|ая|яя)$/u.test(word);
 
-// Ядро подписи: без пояснений в скобках и хвоста после запятой («Аня-пулемётчица, СШ 4»,
-// «Lee-der, г. Амурск»), без точки в конце.
+// Формула вежливости перед ником («С уважением, О'К», «С любовью, Kurtочк@»): ник — то, что после неё.
+const CLOSING = /^\s*с\s+(?:уважением|любовью|приветом)\s*[,:]?\s*(?=\S)/iu;
+
+// Ядро подписи: без формулы вежливости, пояснений в скобках и хвоста после запятой
+// («Аня-пулемётчица, СШ 4», «Lee-der, г. Амурск»), без точки в конце.
 export function nickCore(from: string): string {
   return from
+    .replace(CLOSING, '')
     .replace(/\([^)]*\)/g, ' ')
     .split(/,(?![^«]*»)/)[0]
     .replace(/[«»"“”]/g, '')

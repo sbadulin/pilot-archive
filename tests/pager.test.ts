@@ -21,7 +21,7 @@ import {
   tokenize,
   wordsUnderBox,
 } from '../src/pager.ts';
-import { buildNicks, classifyNick, nickKey, profileCandidates } from '../src/pagerNicks.ts';
+import { buildNicks, classifyNick, nickCore, nickKey, profileCandidates } from '../src/pagerNicks.ts';
 
 const filler = (n: number) => Array.from({ length: n }, (_, i) => `● Привет, номер ${i}! Это довольно длинное сообщение, чтобы колонка вышла большой. Лена ${i}.`).join('\n\n');
 
@@ -193,6 +193,14 @@ test('similar nicks become profile candidates, not merges; distinct people are l
   assert.ok(!candidates.some(candidate => candidate.names.includes('Kurt')));
   assert.ok(profileCandidates(nicks).some(candidate => candidate.names.includes('Kurt')));
   assert.ok(candidates.some(candidate => candidate.names.includes('Растроганный ПТ') && candidate.names.includes('ПТ')));
+});
+
+test('a closing formula before the nick is not the nick («С уважением О\'К» is O\'K)', () => {
+  assert.equal(nickCore("С уважением О'К"), "О'К");
+  assert.equal(nickCore("С уважением, O'K."), "O'K");
+  assert.equal(nickCore('С любовью, Kurtочк@'), 'Kurtочк@');
+  assert.equal(nickKey("С уважением О'К"), nickKey("O'K"));
+  assert.equal(nickCore('С уважением'), 'С уважением');
 });
 
 test('a joint signature counts for each of its authors and makes no nick of its own', () => {
