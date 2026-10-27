@@ -1,8 +1,18 @@
 {
   "comment": "Ручные решения по никам (src/pagerNicks.ts). aliases: подпись → ник, склеивается (ключ — подпись без пояснений в скобках и хвоста после запятой). distinct: группы разных людей, их не предлагать в кандидаты одного профиля. Автоматически ники не склеиваются: похожие попадают в profileCandidates в pager-nicks.json на ручное подтверждение. joint: совместная подпись → её авторы, сообщение идёт в профиль каждого.",
   "joint": {
-    "ICEPAC&Liga-X": ["ICEPAC", "Liga-X"],
-    "RAPлэйбл. OuTloW: ICEPAC&Liga-X": ["ICEPAC", "Liga-X"],    "Kurt & Kurtочк@": ["Kurt", "Kurtочк@"]
+    "ICEPAC&Liga-X": [
+      "ICEPAC",
+      "Liga-X"
+    ],
+    "RAPлэйбл. OuTloW: ICEPAC&Liga-X": [
+      "ICEPAC",
+      "Liga-X"
+    ],
+    "Kurt & Kurtочк@": [
+      "Kurt",
+      "Kurtочк@"
+    ]
   },
   "aliases": {
     "Умиротворенный BAD": "BAD",
@@ -12,7 +22,16 @@
     "RAT": "Rat",
     "Kurtочка": "Kurtочк@",
     "Ice Pac": "ICEPAC",
-    "ICE": "ICEPAC"
+    "ICE": "ICEPAC",
+    "П. Т": "ПТ",
+    "Вежливый ПТ": "ПТ",
+    "Жаждущий ПТ": "ПТ",
+    "Заинтересованный ПТ": "ПТ",
+    "Злобный ПТ": "ПТ",
+    "Растроганный ПТ": "ПТ",
+    "Сонный ПТ": "ПТ",
+    "Crazy Little Queen": "Crazy Queen",
+    "Blez-оптимистка": "Blez"
   },
   "distinct": [
     [
