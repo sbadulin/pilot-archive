@@ -37,15 +37,46 @@ export type AuthorsIndex = { names: { key: string; keys?: string[]; credits: Sit
 // The recognizer sometimes retold a message instead of transcribing it: not the reader's words, not shown.
 export const isRetold = (text: string) => /^\s*\[пересказ\]/iu.test(text);
 
-export type SiteStats = { total: number; kept: number; dropped: { hold: number; retold: number }; profiles: number; withArticles: number };
+export type SiteStats = { total: number; kept: number; dropped: { hold: number; retold: number; duplicate: number }; profiles: number; withArticles: number };
+
+// --- Messages recognized twice ---
+// A page read in overlapping parts can give one message twice with small differences
+// («МЕС! …, а, если понравимся?» / «Мес! …? А если понравимся?»). Same page, same signature and
+// near-identical text is one message; a different leading number («33.» / «123.», a reprint) or ad
+// code («М-277» / «М-278») keeps both.
+const plainText = (text: string) => text.toLowerCase().replace(/ё/g, 'е').replace(/[^\p{L}\p{N}]+/gu, '');
+const leadingCode = (text: string) => text.trim().match(/^(?:\d+\.|[МДMD]\s*-\s*\d+)/iu)?.[0].replace(/\s+/g, '').toLowerCase() ?? null;
+function similarity(a: string, b: string) {
+  if (a.length < 2 || b.length < 2) return a === b ? 1 : 0;
+  const pairs = new Map<string, number>();
+  for (let i = 0; i < a.length - 1; i++) pairs.set(a.slice(i, i + 2), (pairs.get(a.slice(i, i + 2)) ?? 0) + 1);
+  let common = 0;
+  for (let i = 0; i < b.length - 1; i++) {
+    const pair = b.slice(i, i + 2);
+    const count = pairs.get(pair) ?? 0;
+    if (count) (common++, pairs.set(pair, count - 1));
+  }
+  return (2 * common) / (a.length + b.length - 2);
+}
+export function isDuplicate(a: PublicPagerMessage, b: PublicPagerMessage): boolean {
+  if (a.year !== b.year || a.number !== b.number || a.serial !== b.serial || a.sheet !== b.sheet) return false;
+  if (normalizeName(a.from ?? '') !== normalizeName(b.from ?? '')) return false;
+  const [codeA, codeB] = [leadingCode(a.text), leadingCode(b.text)];
+  if (codeA && codeB && codeA !== codeB) return false;
+  const [textA, textB] = [plainText(a.text), plainText(b.text)];
+  return Math.min(textA.length, textB.length) >= 15 && similarity(textA, textB) >= 0.9;
+}
 
 export function buildPagerSite(all: PublicPagerMessage[], rules: NickRules, authors: AuthorsIndex): { site: PagerSite; stats: SiteStats } {
-  const dropped = { hold: 0, retold: 0 };
-  const shown = all.filter((message) => {
-    if (isRetold(message.text)) return void dropped.retold++, false;
-    if (message.hold) return void dropped.hold++, false;
-    return true;
-  });
+  const dropped = { hold: 0, retold: 0, duplicate: 0 };
+  const kept: PublicPagerMessage[] = [];
+  for (const message of all) {
+    if (isRetold(message.text)) { dropped.retold++; continue; }
+    if (message.hold) { dropped.hold++; continue; }
+    if (kept.some((earlier) => isDuplicate(earlier, message))) { dropped.duplicate++; continue; }
+    kept.push(message);
+  }
+  const shown = kept;
   // Profiles count only what is shown, so a held message adds no spelling and no date.
   const nicks = buildNicks(shown, rules).filter((nick) => nick.unique);
   const unique = new Set(nicks.map((nick) => nick.key));

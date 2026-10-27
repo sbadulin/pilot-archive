@@ -64,10 +64,27 @@ const key = (name: string) => profileOf(model, name)!;
 
 test('held and retold messages never reach the site', () => {
   assert.equal(stats.total, 12);
-  assert.deepEqual(stats.dropped, { hold: 1, retold: 1 });
+  assert.deepEqual(stats.dropped, { hold: 1, retold: 1, duplicate: 0 });
   assert.equal(site.messages.length, 10);
   assert.ok(!site.messages.some((message) => message.text.includes('пересказ') || message.text.includes('цензурой')));
   assert.ok(!site.profiles.some((profile) => ['Hidden', 'Retold'].includes(profile.name)));
+});
+
+test('a message recognized twice on one page is shown once; reprints and other ads stay', () => {
+  const page = (n: number, from: string, text: string): PublicPagerMessage =>
+    ({ id: `2000-34-0099-p11-${n}`, year: 2000, number: '34', serial: '0099', date: '2000-08-23', sheet: 11, from, to: [], text });
+  const { site, stats } = buildPagerSite([
+    page(1, 'Спорти', 'МЕС! Вот зачем тебе со мной знакомиться? Ну что мы будем делать, если не понравимся друг другу, а, если понравимся?'),
+    page(2, 'Спорти', 'Мес! Вот зачем тебе со мной знакомиться? Ну что мы будем делать, если не понравимся друг другу? А если понравимся?'),
+    page(3, 'Девушки из шоу', '33. Ребята, которые хотели познакомиться 10.07 на Амуре с нами. Ждем вас 21.07.'),
+    page(4, 'Девушки из шоу', '123. Ребята, которые хотели познакомиться с нами 10.07 на Амуре. Ждем вас 21.07.'),
+    page(5, 'Аноним', 'М-277 Привет обаятельным девушкам 17-23 лет. Хотите познакомиться?'),
+    page(6, 'Аноним', 'М-278. Привет обаятельным девушкам 17-23 лет. Хотите познакомиться?'),
+    page(7, 'Милли', 'Веселая и прикольная девчонка хочет познакомиться с прикольными девчонками. Мне 14 лет.'),
+    page(8, 'Помэлла', 'Веселая и прикольная девчонка хочет познакомиться с прикольными девчонками. Мне 13 лет.'),
+  ], {}, { names: [] });
+  assert.equal(stats.dropped.duplicate, 1);
+  assert.deepEqual(site.messages.map((message) => message.id.split('-').pop()), ['1', '3', '4', '5', '6', '7', '8']);
 });
 
 test('only unique nicks get profiles; shared and first names do not', () => {
@@ -189,6 +206,14 @@ test('a dialog shows only the part of a message addressed to the other side', ()
   // The whole message is addressed to the other side: nothing to cut.
   assert.equal(excerptFor(small, byId.get(messages[3].id)!, sporti), null);
   assert.equal(excerptFor(small, byId.get(messages[1].id)!, bad), null);
+  // A «P.S.» opening the next greeting stays with it, not dangling at the end of this part.
+  const ps = preparePager(buildPagerSite([
+    at(1, 'Спорти', ['МЕС', 'ПТ'], 'МЕС! Вот зачем тебе со мной знакомиться? А если понравимся?\n\nP.S. ПТ, спасибо за заботу.'),
+    at(2, 'МЕС', ['Спорти'], 'Спорти, познакомимся?'),
+    at(3, 'ПТ', ['Спорти'], 'Спорти, пожалуйста.'),
+  ], {}, { names: [] }).site);
+  const fromSporti = ps.messages.find((message) => message.from === 'Спорти')!;
+  assert.equal(excerptFor(ps, fromSporti, profileOf(ps, 'МЕС')!), 'МЕС! Вот зачем тебе со мной знакомиться? А если понравимся?');
   // A nick in the middle of a sentence («спасибо BADy, Rat и Хавчу») isn't a greeting: show it all.
   assert.equal(excerptFor(small, byId.get(messages[4].id)!, bad), null);
 });

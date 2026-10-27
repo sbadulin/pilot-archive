@@ -35,7 +35,7 @@ const out = join(cacheRoot, 'pager-site.json');
 await writeFile(out, body);
 
 const kb = (bytes) => `${(bytes / 1024).toFixed(0)} KB`;
-console.log(`Messages: ${stats.kept} of ${stats.total} kept; dropped ${stats.dropped.hold} on hold, ${stats.dropped.retold} retold`);
+console.log(`Messages: ${stats.kept} of ${stats.total} kept; dropped ${stats.dropped.hold} on hold, ${stats.dropped.retold} retold, ${stats.dropped.duplicate} recognized twice`);
 console.log(`Signed by a profile: ${site.messages.filter((message) => message.nicks).length}`);
 console.log(`Profiles: ${stats.profiles}; with «В газете» articles: ${stats.withArticles}`);
 // The texts alone are most of the file; the site's Caddy serves JSON gzip-compressed.
