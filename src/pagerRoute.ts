@@ -26,9 +26,13 @@ export function parsePagerRoute(hash: string): PagerRoute | null {
   return { nick: decode(nick), tab: known, with: known === 'dialogs' ? decode(other) : null };
 }
 
+// A readable link: «#pager/Спорти», not «#pager/%D0%A1…». Only what would break the link is
+// encoded: the path separator, the fragment and query marks, the escape itself and spaces.
+const segment = (name: string) => name.replace(/[%/#?\s"<>`]/gu, (ch) => encodeURIComponent(ch));
+
 export function pagerHash(nick?: string | null, tab: PagerTab = 'own', other?: string | null): string {
   if (!nick) return '#pager';
-  const base = `#pager/${encodeURIComponent(nick)}`;
-  if (tab === 'dialogs' && other) return `${base}/dialogs/${encodeURIComponent(other)}`;
+  const base = `#pager/${segment(nick)}`;
+  if (tab === 'dialogs' && other) return `${base}/dialogs/${segment(other)}`;
   return tab === 'own' ? base : `${base}/${tab}`;
 }
