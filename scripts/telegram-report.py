@@ -88,7 +88,7 @@ def add_record(days, record):
         params = parse_qs(url.query, max_num_fields=10)
         event = params.get('event', [''])[0]
         query = ' '.join(params.get('q', [''])[0].split()).lower()
-        minimum = 1 if event == 'select' else 3
+        minimum = 1 if event == 'select' else 2
         if not minimum <= len(query) <= 120 or any(ord(char) < 32 for char in query):
             return
         if event == 'search' and params.get('found', [''])[0] in ('0', '1'):
