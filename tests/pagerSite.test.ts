@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildPagerSite, messageWhere, type PublicPagerMessage } from '../src/pagerSite.ts';
+import { readableUrl } from '../src/pagerRoute.ts';
 import {
   addressedTo,
   articlesOf,
@@ -246,4 +247,13 @@ test('a dialog shows only the part of a message addressed to the other side', ()
   assert.equal(excerptFor(ps, fromSporti, profileOf(ps, 'МЕС')!), 'МЕС! Вот зачем тебе со мной знакомиться? А если понравимся?');
   // A nick in the middle of a sentence («спасибо BADy, Rat и Хавчу») isn't a greeting: show it all.
   assert.equal(excerptFor(small, byId.get(messages[4].id)!, bad), null);
+});
+
+test('a copied link reads as letters, but spaces and escapes stay encoded', () => {
+  const live = `https://pilot-archive.ru/#${encodeURI('pager/Спорти')}`;
+  assert.equal(readableUrl(live), 'https://pilot-archive.ru/#pager/Спорти');
+  const dialog = `https://pilot-archive.ru/${encodeURI(pagerHash('Dat Nigga Daz', 'dialogs', 'Тори')).replace(/%25/g, '%')}`;
+  assert.equal(readableUrl(dialog), 'https://pilot-archive.ru/#pager/Dat%20Nigga%20Daz/dialogs/Тори');
+  assert.equal(readableUrl('https://pilot-archive.ru/#pager/100%25%20%D0%AF'), 'https://pilot-archive.ru/#pager/100%25%20Я');
+  assert.equal(readableUrl('https://x/#%D0'), 'https://x/#%D0', 'a broken sequence is left as is');
 });

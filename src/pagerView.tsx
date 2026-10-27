@@ -1,7 +1,7 @@
 // The «Пейджер» section: a feed of readers' pager messages, oldest first, with a profile for
 // every unique nick. Loaded as a separate chunk; pager.json is fetched on the first open.
 import {useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
-import {ArrowLeft, AtSign, FileText, MessageSquare, MessagesSquare, Search, X} from "lucide-react";
+import {ArrowLeft, AtSign, Check, FileText, Link, MessageSquare, MessagesSquare, Search, X} from "lucide-react";
 import {pagerUrl} from "./config";
 import {issueLabel, isSpecial, type Issue} from "./metadata";
 import {createPagerSearchRecorder, trackPagerDialog, trackPagerOpen, trackPagerProfile} from "./pagerAnalytics";
@@ -30,6 +30,7 @@ import {
   type PagerRoute,
   type PagerTab,
 } from "./pagerFeed";
+import {readableUrl} from "./pagerRoute";
 import type {PagerSite, SiteProfile} from "./pagerSite";
 
 let request: Promise<PagerModel> | null = null;
@@ -288,6 +289,27 @@ function Stat({count, forms}: {count: number; forms: [string, string, string]}) 
 
 const KIND: Record<string, string> = {article: "статья", letter: "письмо", drawing: "рисунок", photo: "фото", other: "материал"};
 
+// Copying the address bar gives «#pager/%D0%A1…» (the browser keeps the URL encoded), so the
+// profile offers its own link with the letters as letters. It copies the current tab or dialog.
+function CopyLink() {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+  const copy = () => {
+    void navigator.clipboard?.writeText(readableUrl(window.location.href)).then(() => setCopied(true), () => undefined);
+  };
+  const Icon = copied ? Check : Link;
+  const label = copied ? "Ссылка скопирована" : "Скопировать ссылку";
+  return (
+    <button type="button" className="pg-copy" onClick={copy} title={label} aria-label={label}>
+      <Icon size={22} aria-hidden="true" />
+    </button>
+  );
+}
+
 function Profile({model, profile, route, issues}: {model: PagerModel; profile: SiteProfile; route: PagerRoute; issues: Issue[]}) {
   const own = model.own.get(profile.key) ?? [];
   const about = useMemo(() => mentionsOf(model, profile.key), [model, profile.key]);
@@ -310,7 +332,10 @@ function Profile({model, profile, route, issues}: {model: PagerModel; profile: S
         <ArrowLeft size={16} aria-hidden="true" /> К ленте
       </a>
       <span className="black-label">Профиль</span>
-      <h1>{profile.name}</h1>
+      <div className="pg-title">
+        <h1>{profile.name}</h1>
+        <CopyLink />
+      </div>
       {profile.spellings.length > 0 && <p className="pg-muted">Также подписывался: {profile.spellings.join(", ")}</p>}
       <div className="pg-stats">
         <Stat count={own.length} forms={["сообщение", "сообщения", "сообщений"]} />
