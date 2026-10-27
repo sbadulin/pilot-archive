@@ -115,7 +115,7 @@ export function buildPagerSite(all: PublicPagerMessage[], rules: NickRules, auth
     const members = memberLists.get(nick.key) ?? [];
     const signed = new Set([nick.name, ...nick.spellings].map((spelling) => normalizeName(spelling)));
     const aka = Object.entries(rules.aliases ?? {})
-      .filter(([spelling, target]) => nickKey(target, rules) === nick.key && !signed.has(normalizeName(nickCore(spelling))))
+      .filter(([spelling, target]) => nickKey(target, rules) === nick.key && !signed.has(normalizeName(spelling)) && !signed.has(normalizeName(nickCore(spelling))))
       .map(([spelling]) => spelling);
     const keys = new Set([nick.key, ...nick.spellings.map((spelling) => normalizeName(spelling)), ...bylines.map((name) => normalizeName(name))]);
     const seen = new Set<string>();

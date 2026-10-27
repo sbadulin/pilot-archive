@@ -315,6 +315,14 @@ test('an alias never signed still finds the profile as an addressee', () => {
   assert.deepEqual(mentionsOf(ready, tt.key).map((message) => message.text), [to.text]);
 });
 
+test('an alias of a whole signature keeps its tail and leaves the short core alone', () => {
+  const messages = [at(1, 'ICEPAC', [], 'Йо.'), at(2, 'Old, black brother – Icepac', [], 'Йо-йо.'), at(3, 'Old, СШ 5', [], 'Привет.')];
+  const built = buildPagerSite(messages, { ...rules, aliases: { 'Old, black brother – Icepac': 'ICEPAC' } }, authors).site;
+  const ice = built.profiles.find((profile) => profile.name === 'ICEPAC')!;
+  assert.deepEqual([ice.messages, ice.spellings, ice.aka], [2, ['Old, black brother – Icepac'], undefined]);
+  assert.ok(built.profiles.some((profile) => profile.name === 'Old'), 'another «Old» stays apart');
+});
+
 test('the editorial signature is a profile and names who usually wrote under it', () => {
   const messages = [at(1, 'ПИЛОТЫ', [], 'Ждём писем!'), at(2, 'Пьяные ПИЛОТЫ', [], 'Ик.'), at(3, 'Леся Лу', [], 'Привет!')];
   const built = buildPagerSite(messages, { ...rules, staff: ['Пилоты'], aliases: { 'Пьяные ПИЛОТЫ': 'Пилоты' }, members: { Пилоты: ['Леся Лу'] } }, authors).site;

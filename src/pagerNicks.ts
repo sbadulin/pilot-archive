@@ -163,9 +163,11 @@ const jointOf = (core: string, rules: NickRules) =>
 
 // Один ник — одна нормализованная подпись (регистр, «ё», похожие латинские буквы не важны).
 // Разные подписи склеиваются только ручным правилом: похожее начало ничего не значит.
+// An alias may name a whole signature, tail after the comma included («Old, black brother –
+// Icepac» → ICEPAC), so a short core («Old») is not taken for everyone who starts that way.
 export function nickKey(from: string, rules: NickRules = {}): string {
   const core = nickCore(from);
-  return normalizeName(aliasOf(core, rules) ?? core);
+  return normalizeName(aliasOf(from.trim(), rules) ?? aliasOf(core, rules) ?? core);
 }
 
 // Авторы подписи: совместная («ICEPAC&Liga-X») — каждый из них, иначе сама подпись.
@@ -185,9 +187,12 @@ export function buildNicks(messages: NickMessage[], rules: NickRules = {}): Nick
       if (!key) continue;
       let group = groups.get(key);
       if (!group) groups.set(key, (group = { spellings: new Map(), ids: [], dates: [], target: null }));
-      group.spellings.set(core, (group.spellings.get(core) ?? 0) + 1);
+      // A whole-signature alias keeps the whole signature as the spelling.
+      const whole = joint ? null : aliasOf(message.from.trim(), rules);
+      const spelling = whole ? message.from.trim() : core;
+      group.spellings.set(spelling, (group.spellings.get(spelling) ?? 0) + 1);
       // A joint signature names the author's profile by the author, never by the joint spelling.
-      group.target ??= joint ? (aliasOf(nickCore(author), rules) ?? author) : aliasOf(core, rules);
+      group.target ??= joint ? (aliasOf(nickCore(author), rules) ?? author) : (whole ?? aliasOf(core, rules));
       group.ids.push(message.id);
       group.dates.push(message.date);
     }
