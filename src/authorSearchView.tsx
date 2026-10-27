@@ -1,6 +1,7 @@
 import {useEffect, useId, useMemo, useRef, useState} from "react";
 import {Search} from "lucide-react";
 import {authorsIndexUrl} from "./config";
+import {ArtistGallery} from "./artistGallery";
 import {MIN_QUERY, searchNames} from "./authorSearch";
 import {trackAuthor} from "./authorAnalytics";
 import {issueLabel, type Issue} from "./metadata";
@@ -117,6 +118,7 @@ export function AuthorSearch({issues, onClose}: {issues: Issue[]; onClose: () =>
           {selected.aliases?.length > 0 && (
             <p className="author-aliases">Также встречается как: {selected.aliases.join(", ")}</p>
           )}
+          <ArtistGallery keys={[selected.key, ...(selected.keys ?? [])]} issues={byKey} />
           <ul>
             {credits.map((credit) => {
               const issue = byKey.get(credit.issue)!;

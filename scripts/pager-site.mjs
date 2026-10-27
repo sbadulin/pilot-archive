@@ -10,13 +10,13 @@
 // (по умолчанию https://pilot-archive.ru/archive/authors-index.json, только чтение) с тем же ключом.
 // Адресаты остаются как напечатаны; на сайте ссылки и поиск только по никам, не по «Имя Фамилия».
 // Выкладка на сайт — npm run pager:publish.
-import { execFileSync } from 'node:child_process';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { gzipSync } from 'node:zlib';
 import { dialogsOf, preparePager } from '../src/pagerFeed.ts';
 import { buildPagerSite } from '../src/pagerSite.ts';
+import { spreadSheets } from './spreads.mjs';
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => {
@@ -35,18 +35,14 @@ const authors = /^https?:/.test(authorsSource)
 
 const { exclude } = JSON.parse(await readFile(new URL('./pager-exclude.json', import.meta.url), 'utf8'));
 
-// Sheets scanned as two-page spreads, by the reader's rule (src/app.tsx): area over 1.3× the median.
-// Recognition numbers sheets, the reader's links name printed pages, so the site needs both.
+// Two-page spreads per issue (scripts/spreads.mjs): links name printed pages, recognition sheets.
 const pdfs = await readdir(pdfRoot).catch(() => []);
 const spreads = {};
 for (const issue of new Set(messages.map((message) => `${message.year}-${message.number}-${message.serial}`))) {
   const serial = issue.split('-')[2];
   const file = pdfs.find((name) => name.endsWith('.pdf') && name.includes(`(${serial})`));
   if (!file) { console.warn(`No PDF for ${issue} in ${pdfRoot}: its links name sheets`); continue; }
-  const info = execFileSync('pdfinfo', ['-f', '1', '-l', '9999', join(pdfRoot, file)], { encoding: 'utf8' });
-  const areas = [...info.matchAll(/^Page\s+\d+\s+size:\s+([\d.]+)\s+x\s+([\d.]+)/gm)].map((match) => Number(match[1]) * Number(match[2]));
-  const typical = [...areas].sort((a, b) => a - b)[Math.floor(areas.length / 2)] ?? 0;
-  spreads[issue] = areas.flatMap((area, index) => (area > typical * 1.3 ? [index + 1] : []));
+  spreads[issue] = spreadSheets(join(pdfRoot, file));
 }
 
 const { site, stats } = buildPagerSite(messages, rules, authors, { exclude, spreads });
