@@ -1,6 +1,7 @@
-// Routes of the «Пейджер» section: #pager, #pager/<nick>, #pager/<nick>/<tab>,
-// #pager/<nick>/dialogs/<other>. Kept apart from pagerFeed.ts because the app shell needs only
-// these; the rest of the section is a lazily loaded chunk.
+// Routes of the «Пейджер» section: /pager, /pager/<nick>, /pager/<nick>/<tab>,
+// /pager/<nick>/dialogs/<other>. The first links were hashes («#pager/Спорти»): they still open
+// and are moved to the path. Kept apart from pagerFeed.ts because the app shell needs only these;
+// the rest of the section is a lazily loaded chunk.
 
 export type PagerTab = 'own' | 'about' | 'remarks' | 'articles' | 'dialogs';
 export const PAGER_TABS: PagerTab[] = ['own', 'about', 'remarks', 'articles', 'dialogs'];
@@ -35,6 +36,22 @@ export function pagerHash(nick?: string | null, tab: PagerTab = 'own', other?: s
   const base = `#pager/${segment(nick)}`;
   if (tab === 'dialogs' && other) return `${base}/dialogs/${segment(other)}`;
   return tab === 'own' ? base : `${base}/${tab}`;
+}
+
+/** The section's link: «/pager/Спорти». */
+export const pagerPath = (nick?: string | null, tab: PagerTab = 'own', other?: string | null) =>
+  `/${pagerHash(nick, tab, other).slice(1)}`;
+
+export const isPagerPath = (pathname: string) => pathname === '/pager' || pathname.startsWith('/pager/');
+
+/**
+ * The route of an address. A hash link opened from the section wins over its path; an old
+ * «#pager/…» link is read as its path.
+ */
+export function pagerRouteOf(pathname: string, hash: string): PagerRoute | null {
+  if (isPagerHash(hash)) return parsePagerRoute(hash);
+  if (hash && hash !== '#') return null;
+  return isPagerPath(pathname) ? parsePagerRoute(`#${pathname.replace(/\/+$/, '').slice(1)}`) : null;
 }
 
 // The browser keeps a URL percent-encoded (location.href is «#pager/%D0%A1…») and copying the
