@@ -1,7 +1,7 @@
 // PROTOTYPE — throwaway. Three variants of the «Pageer» section, switchable via ?variant=A|B|C
 // and the floating bar at the bottom (← → keys). Data: hand-picked sample (pageerSample.ts).
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, CornerDownRight, FileText, MessageSquare, AtSign } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CornerDownRight, FileText, MessageSquare, MessagesSquare, AtSign } from 'lucide-react';
 import { byNick, dateLabel, issueLabel, mentions, messages, nickOf, profiles, type PagerMessage } from './pageerSample';
 
 const VARIANTS = [
@@ -15,6 +15,63 @@ const byId = new Map(messages.map((msg) => [msg.id, msg]));
 const sorted = [...messages].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
 const pageHref = (msg: { issue: string; sheet: number }) => `#issue-${msg.issue}-p${msg.sheet}`;
 
+// Profile and tab live in the address (#pageer/BAD/dialogs), so the browser's Back works and links can be shared.
+type Tab = 'own' | 'about' | 'articles' | 'dialogs';
+const TABS: Tab[] = ['own', 'about', 'articles', 'dialogs'];
+function readRoute() {
+  const [, nick, tab, withNick] = window.location.hash.replace(/^#/, '').split('/').map(decodeURIComponent);
+  return { nick: nick || null, tab: (TABS.includes(tab as Tab) ? tab : 'own') as Tab, with: withNick || null };
+}
+function useRoute() {
+  const [route, setRoute] = useState(readRoute);
+  useEffect(() => {
+    const update = () => setRoute(readRoute());
+    window.addEventListener('hashchange', update);
+    return () => window.removeEventListener('hashchange', update);
+  }, []);
+  return route;
+}
+const profileHash = (nick: string, tab: Tab = 'own', withNick?: string) =>
+  `#pageer/${encodeURIComponent(nick)}${tab === 'own' && !withNick ? '' : `/${tab}`}${withNick ? `/${encodeURIComponent(withNick)}` : ''}`;
+const openProfile = (nick: string, tab: Tab = 'own') => { window.location.hash = profileHash(nick, tab); };
+const closeProfile = () => { window.location.hash = 'pageer'; };
+
+// The nick's exchanges grouped by counterpart: its messages to X and X's messages to or about it.
+function threadsOf(nick: string, aliases: string[]) {
+  const threads = new Map<string, PagerMessage[]>();
+  for (const msg of [...byNick(nick), ...mentions(nick, aliases)].sort((a, b) => a.date.localeCompare(b.date))) {
+    const other = msg.nick === nick ? (nickOf(msg.to[0] ?? '') ?? msg.to[0] ?? 'всем') : (msg.nick ?? msg.from);
+    threads.set(other, [...(threads.get(other) ?? []), msg]);
+  }
+  return threads;
+}
+
+function Dialogs({ nick, aliases, onOpen, only }: { nick: string; aliases: string[]; onOpen: (nick: string) => void; only?: string | null }) {
+  const all = threadsOf(nick, aliases);
+  const threads = only ? [...all].filter(([other]) => other.toLowerCase() === only.toLowerCase()) : [...all];
+  if (!all.size) return <p className="pg-muted">Переписки пока нет.</p>;
+  return (
+    <div className="pg-dialogs">
+      {only && <a className="pg-back" href={profileHash(nick, 'dialogs')}><ArrowLeft size={16} /> Все диалоги {nick}</a>}
+      {!threads.length && <p className="pg-muted">Диалога с {only} нет.</p>}
+      {threads.map(([other, list]) => (
+        <div key={other} className="pg-thread-box">
+          <h3>
+            {nick} <span className="pg-muted">и</span> <Name name={other} onOpen={onOpen} />
+            {!only && <a className="pg-permalink" href={profileHash(nick, 'dialogs', other)} title="Ссылка на этот диалог">#</a>}
+          </h3>
+          {list.map((msg) => (
+            <div key={msg.id} className={`pg-bubble ${msg.nick === nick ? 'mine' : ''}`}>
+              <span className="pg-muted">{msg.from} · {dateLabel(msg.date)} · <a href={pageHref(msg)}>{issueLabel(msg.issue)}</a></span>
+              <p>{msg.text}</p>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // A name that has a profile becomes a link; any other name stays plain text (no aggregation of real names).
 function Name({ name, onOpen, strong = true }: { name: string; onOpen: (nick: string) => void; strong?: boolean }) {
   const nick = nickOf(name);
@@ -27,11 +84,13 @@ function Avatar({ name }: { name: string }) {
   return <span className="pg-avatar" aria-hidden>{letters}</span>;
 }
 
-function Profile({ nick, onOpen, onClose, compact = false }: { nick: string; onOpen: (nick: string) => void; onClose?: () => void; compact?: boolean }) {
+function Profile({ nick, onOpen, onClose, compact = false, tab: routeTab, onTab, withNick }: { nick: string; onOpen: (nick: string) => void; onClose?: () => void; compact?: boolean; tab?: Tab; onTab?: (tab: Tab) => void; withNick?: string | null }) {
   const profile = profiles[nick] ?? { nick, aliases: [], articles: [] };
   const own = byNick(nick);
   const about = mentions(nick, profile.aliases);
-  const [tab, setTab] = useState<'own' | 'about' | 'articles'>('own');
+  const [localTab, setLocalTab] = useState<Tab>('own');
+  const tab = routeTab ?? localTab;
+  const setTab = onTab ?? setLocalTab;
   const list = tab === 'own' ? own : about;
   const dates = own.map((msg) => msg.date).sort();
   return (
@@ -51,8 +110,11 @@ function Profile({ nick, onOpen, onClose, compact = false }: { nick: string; onO
         <button className={tab === 'own' ? 'on' : ''} onClick={() => setTab('own')}><MessageSquare size={15} /> Сообщения</button>
         <button className={tab === 'about' ? 'on' : ''} onClick={() => setTab('about')}><AtSign size={15} /> Упоминания</button>
         <button className={tab === 'articles' ? 'on' : ''} onClick={() => setTab('articles')}><FileText size={15} /> В газете</button>
+        <button className={tab === 'dialogs' ? 'on' : ''} onClick={() => setTab('dialogs')}><MessagesSquare size={15} /> Диалоги</button>
       </div>
-      {tab === 'articles' ? (
+      {tab === 'dialogs' ? (
+        <Dialogs nick={nick} aliases={profile.aliases} onOpen={onOpen} only={withNick} />
+      ) : tab === 'articles' ? (
         <ul className="pg-articles">
           {profile.articles.map((article) => (
             <li key={article.issue + article.page + article.title}>
@@ -96,8 +158,9 @@ function Post({ msg, onOpen }: { msg: PagerMessage; onOpen: (nick: string) => vo
 
 // A — a single-column timeline, oldest first, with a year rail on the left.
 function VariantA() {
-  const [nick, setNick] = useState<string | null>(null);
-  if (nick) return <div className="pg-a"><aside className="pg-rail"><Intro /></aside><Profile nick={nick} onOpen={setNick} onClose={() => setNick(null)} /></div>;
+  const { nick, tab, with: withNick } = useRoute();
+  const setNick = (next: string) => openProfile(next);
+  if (nick) return <div className="pg-a"><aside className="pg-rail"><Intro /></aside><Profile nick={nick} onOpen={setNick} onClose={closeProfile} tab={tab} onTab={(next) => openProfile(nick, next)} withNick={withNick} /></div>;
   const months = new Map<string, PagerMessage[]>();
   for (const msg of sorted) months.set(msg.date.slice(0, 7), [...(months.get(msg.date.slice(0, 7)) ?? []), msg]);
   return (
@@ -107,7 +170,7 @@ function VariantA() {
         <nav className="pg-months">
           {[...months.keys()].map((month) => <a key={month} href={`#m-${month}`}>{new Date(`${month}-15`).toLocaleDateString('ru-RU', { month: 'long' })}</a>)}
         </nav>
-        <button className="pg-cta" onClick={() => setNick('BAD')}>Профиль BAD →</button>
+        <a className="pg-cta" href="#pageer/BAD">Профиль BAD →</a>
       </aside>
       <div className="pg-feed">
         {[...months].map(([month, list]) => (
@@ -309,7 +372,7 @@ const CSS = `
 .pg-tabs button { display: inline-flex; gap: 6px; align-items: center; padding: 9px 14px; border: 0; border-right: 1px solid var(--ink); background: transparent; font-size: 14px; font-weight: 500; }
 .pg-tabs button:last-child { border-right: 0; }
 .pg-tabs button.on { background: var(--ink); color: var(--paper); }
-.pg-profile .pg-feed { width: 100%; }
+.pg-profile .pg-feed, .pg-dialogs { width: 100%; display: grid; gap: 18px; }
 .pg-articles { list-style: none; margin: 0; padding: 0; width: 100%; border-top: 5px solid var(--ink); }
 .pg-articles a { display: grid; gap: 2px; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .pg-articles a:hover b { text-decoration: underline; }
@@ -342,6 +405,8 @@ const CSS = `
 .pg-clip:hover { background: var(--accent); }
 .pg-thread-box { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--ink); }
 .pg-thread-box h3 { font-size: 22px; }
+.pg-permalink { margin-left: 8px; color: var(--muted); font-weight: 400; }
+.pg-permalink:hover { color: var(--ink); }
 .pg-bubble { max-width: min(560px, 88%); padding: 10px 14px; border: 1px solid var(--ink); background: #fff; }
 .pg-bubble.mine { justify-self: end; background: var(--ink); color: var(--paper); }
 .pg-bubble.mine .pg-muted, .pg-bubble.mine a { color: #c9cabe; }
@@ -358,5 +423,6 @@ const CSS = `
   .pg-index p { display: none; }
   .pg-intro h2 { font-size: 44px; }
   .pg-profile h2 { font-size: 48px; }
+  .pg-tabs { flex-wrap: wrap; }
 }
 `;

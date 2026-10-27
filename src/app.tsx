@@ -1641,7 +1641,7 @@ export default function Home() {
               issue.serial === issueMatch[3].padStart(4, "0"),
           )
         : undefined;
-      if (hash === "#pageer" && __ADMIN__ && !isPublicSite()) {
+      if ((hash === "#pageer" || hash.startsWith("#pageer/")) && __ADMIN__ && !isPublicSite()) {
         setScreen({kind: "pageer"}); // PROTOTYPE
       } else if (hash === "#authors" && !isPublicSite()) {
         setScreen({kind: "authors"});
