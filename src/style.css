@@ -561,9 +561,10 @@ button, a { transition: background-color .15s, color .15s, border-color .15s; }
 .pg-stats { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 12px 0; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); width: 100%; font-size: 14px; }
 .pg-stats b { font: 800 22px 'Roboto Condensed', sans-serif; margin-right: 2px; }
 .pg-stats > span { display: inline-flex; align-items: baseline; gap: 4px; }
-.pg-tabs { display: flex; border: 1px solid var(--ink); }
-.pg-tabs a { display: inline-flex; gap: 6px; align-items: center; padding: 9px 14px; border-right: 1px solid var(--ink); font-size: 14px; font-weight: 500; }
-.pg-tabs a:last-child { border-right: 0; }
+/* Lines are 1px gaps over the ink: when five tabs do not fit the column they wrap and the last
+   row stretches, with no broken borders and no label split in two. */
+.pg-tabs { display: flex; flex-wrap: wrap; gap: 1px; max-width: 100%; border: 1px solid var(--ink); background: var(--ink); }
+.pg-tabs a { flex: 1 1 auto; display: inline-flex; gap: 6px; align-items: center; justify-content: center; padding: 9px 14px; font-size: 14px; font-weight: 500; white-space: nowrap; background: var(--paper); }
 /* Only the current tab is filled; the others just underline on hover. No fade: during the site-wide
    colour transition two tabs looked selected at once. */
 .pg-tabs a { transition: none; }
@@ -596,10 +597,9 @@ button, a { transition: background-color .15s, color .15s, border-color .15s; }
   .pg-profile h1 { font-size: 48px; }
 }
 @media (max-width: 540px) {
+  /* Two by two on a phone; an odd last tab takes the whole row. */
   .pg-tabs { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
-  .pg-tabs a { justify-content: center; border-right: 0; }
-  .pg-tabs a:nth-child(odd) { border-right: 1px solid var(--ink); }
-  .pg-tabs a:nth-child(-n + 2) { border-bottom: 1px solid var(--ink); }
+  .pg-tabs a:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .pg-avatar { width: 34px; height: 34px; font-size: 12px; }
   .pg-post { gap: 10px; }
   .pg-bubble { max-width: 94%; }

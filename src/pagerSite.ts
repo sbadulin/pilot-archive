@@ -124,7 +124,8 @@ export function buildPagerSite(all: PublicPagerMessage[], rules: NickRules, auth
     return {
       key: nick.key,
       name: nick.name,
-      spellings: nick.spellings.filter((spelling) => spelling !== nick.name),
+      // «ТТ и ПТ» is signed by two, not another spelling of either.
+      spellings: nick.spellings.filter((spelling) => spelling !== nick.name && !signatureAuthors(spelling, rules).joint),
       messages: nick.messages,
       first: nick.first,
       last: nick.last,
