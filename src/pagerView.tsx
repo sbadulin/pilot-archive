@@ -302,9 +302,10 @@ function CopyLink() {
     void navigator.clipboard?.writeText(readableUrl(window.location.href)).then(() => setCopied(true), () => undefined);
   };
   const Icon = copied ? Check : Link;
+  const label = copied ? "Ссылка скопирована" : "Скопировать ссылку";
   return (
-    <button type="button" className="pg-copy" onClick={copy}>
-      <Icon size={15} aria-hidden="true" /> {copied ? "Ссылка скопирована" : "Скопировать ссылку"}
+    <button type="button" className="pg-copy" onClick={copy} title={label} aria-label={label}>
+      <Icon size={22} aria-hidden="true" />
     </button>
   );
 }
@@ -331,7 +332,10 @@ function Profile({model, profile, route, issues}: {model: PagerModel; profile: S
         <ArrowLeft size={16} aria-hidden="true" /> К ленте
       </a>
       <span className="black-label">Профиль</span>
-      <h1>{profile.name}</h1>
+      <div className="pg-title">
+        <h1>{profile.name}</h1>
+        <CopyLink />
+      </div>
       {profile.spellings.length > 0 && <p className="pg-muted">Также подписывался: {profile.spellings.join(", ")}</p>}
       <div className="pg-stats">
         <Stat count={own.length} forms={["сообщение", "сообщения", "сообщений"]} />
@@ -339,7 +343,6 @@ function Profile({model, profile, route, issues}: {model: PagerModel; profile: S
         <Stat count={articles.length} forms={["материал", "материала", "материалов"]} />
         {first && <span>{first === last ? dateLabel(first) : `${dateLabel(first)} — ${dateLabel(last)}`}</span>}
       </div>
-      <CopyLink />
       <nav className="pg-tabs" aria-label="Разделы профиля">
         {tabs.map(([tab, label, Icon]) => (
           <a key={tab} href={profileHref(profile, tab)} className={route.tab === tab ? "on" : ""} aria-current={route.tab === tab ? "page" : undefined}>
