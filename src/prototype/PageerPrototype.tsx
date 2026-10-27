@@ -214,7 +214,7 @@ function VariantA() {
   const { nick, tab, with: withNick } = useRoute();
   const setNick = (next: string) => openProfile(next);
   const [addressee, setAddressee] = useState<string | null>(null);
-  if (nick) return <div className="pg-a"><aside className="pg-rail"><Intro /></aside><Profile nick={nick} onOpen={setNick} onClose={closeProfile} tab={tab} onTab={(next) => openProfile(nick, next)} withNick={withNick} /></div>;
+  if (nick) return <div className="pg-a"><aside className="pg-rail"><Intro /><PagerSearch onAddressee={(name) => { setAddressee(name); closeProfile(); }} /></aside><Profile nick={nick} onOpen={setNick} onClose={closeProfile} tab={tab} onTab={(next) => openProfile(nick, next)} withNick={withNick} /></div>;
   const months = new Map<string, PagerMessage[]>();
   const shown = addressee ? sorted.filter((msg) => msg.to.some((t) => t === addressee || (nickOf(t) && nickOf(t) === nickOf(addressee)))) : sorted;
   for (const msg of shown) months.set(msg.date.slice(0, 7), [...(months.get(msg.date.slice(0, 7)) ?? []), msg]);
