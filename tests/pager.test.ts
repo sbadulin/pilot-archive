@@ -194,3 +194,17 @@ test('similar nicks become profile candidates, not merges; distinct people are l
   assert.ok(profileCandidates(nicks).some(candidate => candidate.names.includes('Kurt')));
   assert.ok(candidates.some(candidate => candidate.names.includes('Растроганный ПТ') && candidate.names.includes('ПТ')));
 });
+
+test('a joint signature counts for each of its authors and makes no nick of its own', () => {
+  const rules = { joint: { 'ICEPAC&Liga-X': ['ICEPAC', 'Liga-X'] } };
+  const nicks = buildNicks([
+    { id: 'a', date: '2000-02-16', from: 'ICEPAC' },
+    { id: 'b', date: '2000-02-23', from: 'ICEPAC&Liga-X' },
+    { id: 'c', date: '2000-03-22', from: 'Liga-X' },
+  ], rules);
+  const byName = new Map(nicks.map(nick => [nick.name, nick]));
+  assert.deepEqual(byName.get('ICEPAC')?.ids, ['a', 'b']);
+  assert.deepEqual(byName.get('Liga-X')?.ids, ['b', 'c']);
+  assert.equal(byName.has('ICEPAC&Liga-X'), false);
+  assert.ok(byName.get('ICEPAC')?.spellings.includes('ICEPAC&Liga-X'));
+});

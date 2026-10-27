@@ -143,10 +143,13 @@ export type NickMessage = { id: string; date: string; from: string | null };
 export type Nick = { key: string; name: string; spellings: string[]; class: NickClass; unique: boolean; messages: number; first: string; last: string; ids: string[] };
 // Ручные решения (scripts/pager-nick-aliases.json): aliases — подпись → ник (склеить),
 // distinct — группы разных людей, которых не предлагать в кандидаты («Kurt» и «Kurtочк@»).
-export type NickRules = { aliases?: Record<string, string>; distinct?: string[][] };
+// joint — совместная подпись → её авторы («ICEPAC&Liga-X» → ICEPAC и Liga-X): сообщение идёт в каждый профиль.
+export type NickRules = { aliases?: Record<string, string>; distinct?: string[][]; joint?: Record<string, string[]> };
 
 const aliasOf = (core: string, rules: NickRules) =>
   Object.entries(rules.aliases ?? {}).find(([spelling]) => normalizeName(spelling) === normalizeName(core))?.[1] ?? null;
+const jointOf = (core: string, rules: NickRules) =>
+  Object.entries(rules.joint ?? {}).find(([signature]) => normalizeName(signature) === normalizeName(core))?.[1] ?? null;
 
 // Один ник — одна нормализованная подпись (регистр, «ё», похожие латинские буквы не важны).
 // Разные подписи склеиваются только ручным правилом: похожее начало ничего не значит.
@@ -160,14 +163,18 @@ export function buildNicks(messages: NickMessage[], rules: NickRules = {}): Nick
   for (const message of messages) {
     if (!message.from?.trim()) continue;
     const core = nickCore(message.from);
-    const key = nickKey(message.from, rules);
-    if (!key) continue;
-    let group = groups.get(key);
-    if (!group) groups.set(key, (group = { spellings: new Map(), ids: [], dates: [], target: null }));
-    group.spellings.set(core, (group.spellings.get(core) ?? 0) + 1);
-    group.target ??= aliasOf(core, rules);
-    group.ids.push(message.id);
-    group.dates.push(message.date);
+    const authors = jointOf(core, rules);
+    for (const author of authors ?? [message.from]) {
+      const key = nickKey(author, rules);
+      if (!key) continue;
+      let group = groups.get(key);
+      if (!group) groups.set(key, (group = { spellings: new Map(), ids: [], dates: [], target: null }));
+      group.spellings.set(core, (group.spellings.get(core) ?? 0) + 1);
+      // A joint signature names the author's profile by the author, never by the joint spelling.
+      group.target ??= authors ? (aliasOf(nickCore(author), rules) ?? author) : aliasOf(core, rules);
+      group.ids.push(message.id);
+      group.dates.push(message.date);
+    }
   }
   return [...groups.entries()].map(([key, group]) => {
     const spellings = [...group.spellings.entries()].sort((a, b) => b[1] - a[1]).map(([spelling]) => spelling);
