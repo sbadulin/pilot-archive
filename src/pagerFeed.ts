@@ -20,6 +20,7 @@ export type PagerModel = {
   byName: Map<string, string>; // normalized name or spelling → profile key
   names: string[]; // every profile name and spelling, for cutting longer nicks out of texts
   featured: string[]; // search examples that have a profile
+  authors: Map<string, string>; // folded nick of someone from the newspaper → their author card name
 };
 
 export function preparePager(site: PagerSite): PagerModel {
@@ -41,7 +42,8 @@ export function preparePager(site: PagerSite): PagerModel {
       if (key && !byName.has(key)) byName.set(key, profile.key);
     }
   }
-  const model: PagerModel = { messages, profiles, own: new Map(), byName, names: [], featured: [] };
+  const authors = new Map(Object.entries(site.authors ?? {}).map(([nick, author]) => [foldCase(nick), author]));
+  const model: PagerModel = { messages, profiles, own: new Map(), byName, names: [], featured: [], authors };
   // Which addressees are profiles, worked out once: mentions, dialogs and links all need it.
   // A profile with listed mentions is the addressee only there: other «Натуська» are other girls.
   const listed = (key: string | null, id: string) => {
@@ -64,6 +66,9 @@ export function profileOf(model: PagerModel, name: string): string | null {
   const town = bracketed && /^(?:г\.\s*)?\p{Lu}\p{Ll}+ск(?!\p{L})/u.test(bracketed);
   return find(nickCore(name)) ?? find(name) ?? (bracketed && !town ? find(bracketed) : undefined) ?? null;
 }
+
+/** The author card a nick that is not a pager profile leads to («Злат» → «Захар ВЕСЕЛОВ»), if any. */
+export const authorOf = (model: PagerModel, name: string) => model.authors.get(foldCase(normalizeName(nickCore(name)))) ?? null;
 
 // «В газете»: the profile's signed materials, oldest first.
 export const articlesOf = (model: PagerModel, key: string) =>

@@ -6,6 +6,7 @@ import { withAdjectives } from '../src/pagerNicks.ts';
 import {
   addressedTo,
   articlesOf,
+  authorOf,
   dialogsOf,
   excerptFor,
   isSearchableAddressee,
@@ -332,6 +333,16 @@ test('a nick shared by many by name is mentioned and addressed only where listed
   assert.deepEqual(mentionsOf(built, key).map((message) => message.id), [hers.id]);
   assert.deepEqual(built.messages.find((message) => message.id === other.id)!.toKeys, [null], 'another Натуська is not linked');
   assert.deepEqual(dialogsOf(built, key).map((dialog) => dialog.other), [profileOf(built, 'Бука')].filter(Boolean));
+});
+
+test('a hand fix splits addressees; a newspaper nick without a profile leads to the author card', () => {
+  const sly = at(1, 'SLY', ['Diavol', 'злат BOB', 'Туса'], 'Hi, злат BOB и Туса.');
+  const built = buildPagerSite([sly], { ...rules, authors: { Злат: 'Захар ВЕСЕЛОВ' } }, authors, { fixes: { [sly.id]: { to: ['Diavol', 'Злат', 'BOB', 'Туса'] } } }).site;
+  assert.deepEqual(built.messages[0].to, ['Diavol', 'Злат', 'BOB', 'Туса']);
+  const ready = preparePager(built);
+  assert.equal(authorOf(ready, 'Злат'), 'Захар ВЕСЕЛОВ');
+  assert.equal(authorOf(ready, 'злат'), 'Захар ВЕСЕЛОВ', 'case aside');
+  assert.equal(authorOf(ready, 'BOB'), null);
 });
 
 test('the editorial signature is a profile and names who usually wrote under it', () => {
