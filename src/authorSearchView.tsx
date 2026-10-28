@@ -2,7 +2,8 @@ import {useEffect, useId, useMemo, useRef, useState} from "react";
 import {Search} from "lucide-react";
 import {authorsIndexUrl} from "./config";
 import {ArtistGallery} from "./artistGallery";
-import {MIN_QUERY, searchNames} from "./authorSearch";
+import {MIN_QUERY, linkedEntry, searchNames} from "./authorSearch";
+import {showAuthorInAddress} from "./authorLink";
 import {trackAuthor} from "./authorAnalytics";
 import {issueLabel, type Issue} from "./metadata";
 import type {IndexName} from "../functions/api/_lib/authorsIndex";
@@ -14,14 +15,17 @@ const materialCount = (count: number) => {
   return `${count} материалов`;
 };
 
-// Search by the names printed under materials; results link to the page in the reader.
-export function AuthorSearch({issues, onClose}: {issues: Issue[]; onClose: () => void}) {
+// Search by the names printed under materials; results link to the page in the reader. A direct link
+// («?author=Захар+Веселов», src/authorLink.ts) starts it on that name and opens the card.
+export function AuthorSearch({issues, onClose, linked = null}: {issues: Issue[]; onClose: () => void; linked?: string | null}) {
   const listId = useId();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(linked ?? "");
   const [index, setIndex] = useState<IndexName[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [selected, setSelected] = useState<IndexName | null>(null);
   const lastSearch = useRef("");
+  const pendingLink = useRef(linked);
+  const card = useRef<HTMLDivElement>(null);
 
   // The index is fetched on first use: most visitors never search.
   useEffect(() => {
@@ -65,7 +69,18 @@ export function AuthorSearch({issues, onClose}: {issues: Issue[]; onClose: () =>
     recordSearch();
     trackAuthor("select", entry.name);
     setSelected(entry);
+    showAuthorInAddress(entry.name);
   };
+
+  // A direct link opens its card once the index is in, and brings it into view.
+  useEffect(() => {
+    if (!visible || !pendingLink.current) return;
+    const entry = linkedEntry(visible, pendingLink.current);
+    pendingLink.current = null;
+    if (!entry) return;
+    setSelected(entry);
+    requestAnimationFrame(() => card.current?.scrollIntoView({behavior: "smooth", block: "start"}));
+  }, [visible]);
 
   return (
     <section className="author-search" aria-label="Поиск по авторам">
@@ -87,6 +102,7 @@ export function AuthorSearch({issues, onClose}: {issues: Issue[]; onClose: () =>
           onChange={(event) => {
             setQuery(event.target.value);
             setSelected(null);
+            showAuthorInAddress(null);
           }}
           onKeyDown={(event) => {
             if (event.key === "Enter" && matches[0]) selectAuthor(matches[0]);
@@ -113,7 +129,7 @@ export function AuthorSearch({issues, onClose}: {issues: Issue[]; onClose: () =>
       )}
       {long && failed && <p className="author-empty">Поиск по авторам пока недоступен.</p>}
       {selected && (
-        <div className="author-credits">
+        <div className="author-credits" ref={card}>
           <h3>{selected.name}</h3>
           {selected.aliases?.length > 0 && (
             <p className="author-aliases">Также встречается как: {selected.aliases.join(", ")}</p>

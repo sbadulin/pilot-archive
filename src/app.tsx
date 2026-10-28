@@ -32,6 +32,7 @@ import {adminUrl, isPublicSite, manifestUrl} from "./config";
 import {groupSpreads, printedPages} from "./readerLayout";
 import {Checkbox} from "./checkbox";
 import {AuthorSearch} from "./authorSearchView";
+import {authorHref, linkedAuthor, showAuthorInAddress} from "./authorLink";
 import {AdultBadge} from "./ageGate";
 import {openPdf} from "./pdf";
 import {go, onRoute, routeLinks} from "./navigation";
@@ -1591,7 +1592,18 @@ export default function Home() {
   const [screen, setScreen] = useState<Screen>({kind: "archive"});
   const [year, setYear] = useState(2000);
   const [archiveIssues, setArchiveIssues] = useState<Issue[]>(staticIssues);
-  const [searchOpen, setSearchOpen] = useState(false);
+  // «?author=…» (src/authorLink.ts) opens the archive with that author's card.
+  const [linkedName, setLinkedName] = useState(() => linkedAuthor());
+  // A person in «Люди» with a card: opens it here, without reloading the page.
+  const openAuthor = (event: React.MouseEvent, name: string) => {
+    event.preventDefault();
+    // The whole address: a «#creators» left in it would scroll a shared link to «Люди».
+    window.history.pushState(null, "", authorHref(name));
+    setLinkedName(name);
+    setSearchOpen(true);
+    window.scrollTo({top: 0, behavior: "smooth"});
+  };
+  const [searchOpen, setSearchOpen] = useState(() => linkedName !== null);
   // Curator tools appear only for a curator signed in through Cloudflare Access.
   const [isCurator, setIsCurator] = useState(false);
   useEffect(() => {
@@ -1836,7 +1848,10 @@ export default function Home() {
               <button
                 className="archive-search-toggle"
                 aria-expanded={searchOpen}
-                onClick={() => setSearchOpen((open) => !open)}
+                onClick={() => {
+                  if (searchOpen) showAuthorInAddress(null);
+                  setSearchOpen(!searchOpen);
+                }}
               >
                 {searchOpen ? (
                   <X size={18} aria-hidden="true" />
@@ -1849,8 +1864,13 @@ export default function Home() {
           </div>
           {searchOpen && (
             <AuthorSearch
+              key={linkedName ?? ""}
               issues={archiveIssues}
-              onClose={() => setSearchOpen(false)}
+              linked={linkedName}
+              onClose={() => {
+                showAuthorInAddress(null);
+                setSearchOpen(false);
+              }}
             />
           )}
           <nav className="year-picker" aria-label="Выбрать год">
@@ -2084,7 +2104,10 @@ export default function Home() {
                 <strong>Евгения Белоусова</strong>
               </article>
               <article>
-                <strong>Захар Веселов</strong>
+                <a className="creator-link" href={authorHref("Захар Веселов")} onClick={(event) => openAuthor(event, "Захар Веселов")}>
+                  <strong>Захар Веселов</strong>
+                  <span>рисунки и материалы</span>
+                </a>
               </article>
               <article>
                 <strong>Владимир Ерошенко</strong>
