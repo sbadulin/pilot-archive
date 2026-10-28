@@ -235,6 +235,13 @@ button, a { transition: background-color .15s, color .15s, border-color .15s; }
 .creator-list article:nth-child(even) { padding-left: 18px; border-left: 1px solid var(--line); }
 .creator-list strong { display: block; font-family: 'Roboto Condensed', sans-serif; font-size: 21px; font-weight: 700; }
 .creator-list span { display: block; color: var(--muted); font-size: 13px; margin-top: 7px; }
+/* A person with an author card (src/authorLink.ts). */
+.creator-link { display: block; color: var(--ink); text-decoration: none; }
+.creator-link strong { text-decoration: underline; text-decoration-thickness: 1px; text-decoration-color: var(--line); text-underline-offset: 4px; }
+.creator-link:hover strong, .creator-link:focus-visible strong { text-decoration-color: currentColor; }
+.creator-link span::after { content: " →"; }
+.creator-link:hover span, .creator-link:focus-visible span { color: var(--ink); background: var(--accent); display: inline-block; }
+.creator-link:focus-visible { outline: 0; }
 .creator-source { grid-column: 2; color: var(--muted); font-size: 12px; line-height: 1.55; margin-top: -24px; max-width: 620px; }
 .site-footer { padding-block: 24px 32px; border-top: 1px solid var(--ink); display: flex; gap: 28px; justify-content: space-between; color: var(--muted); font-size: 12px; }
 .footer-demo { margin-left: auto; }

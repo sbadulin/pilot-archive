@@ -40,6 +40,18 @@ export function matchesQuery(query: string, keys: string[]): boolean {
   });
 }
 
+/**
+ * The author a direct link names («?author=Захар+Веселов»): the entry with exactly that name among
+ * its spellings, else the only one the search finds; several matches stay a list to choose from.
+ */
+export function linkedEntry(names: IndexName[], name: string): IndexName | null {
+  const key = foldCase(normalizeName(name));
+  const exact = names.find((entry) => (entry.keys ?? [entry.key]).some((spelling) => foldCase(spelling) === key));
+  if (exact) return exact;
+  const found = searchNames(names, name, 2);
+  return found.length === 1 ? found[0] : null;
+}
+
 export function searchNames(names: IndexName[], query: string, limit = 8): IndexName[] {
   return names
     // Any spelling folded into the entry finds it.
