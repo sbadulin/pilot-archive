@@ -145,10 +145,11 @@ function PdfCanvas({
     let task:
       | ReturnType<Awaited<ReturnType<PDFDocumentProxy["getPage"]>>["render"]>
       | undefined;
-    setLoading(true);
     setError("");
     const target = canvas.current;
     if (!target) return;
+    // «Открываем страницу…» only over an empty sheet: on a zoom the old picture stays until the new one.
+    setLoading(target.width === 0);
     if (!near || hold) {
       target.width = 0;
       target.height = 0;
@@ -168,14 +169,18 @@ function PdfCanvas({
           rotation: (sheet.rotate + rotation) % 360,
         });
         setRatio(viewport.width / viewport.height);
-        target.width = viewport.width;
-        target.height = viewport.height;
-        task = sheet.render({canvas: target, viewport});
+        // Drawn aside and swapped in whole: resizing the visible canvas would blank it until done.
+        const drawing = document.createElement("canvas");
+        drawing.width = viewport.width;
+        drawing.height = viewport.height;
+        task = sheet.render({canvas: drawing, viewport});
         await task.promise;
-        if (!cancelled) {
-          setLoading(false);
-          onSettled?.();
-        }
+        if (cancelled) return;
+        target.width = drawing.width;
+        target.height = drawing.height;
+        target.getContext("2d")?.drawImage(drawing, 0, 0);
+        setLoading(false);
+        onSettled?.();
       } catch (e) {
         if (!cancelled && (e as Error).name !== "RenderingCancelledException") {
           setError("Не удалось показать страницу. Выберите её ещё раз.");
@@ -243,6 +248,11 @@ function usePinchZoom(
     const target = anchor.current;
     if (!element || !target) return;
     anchor.current = null;
+    // The preview goes in the same frame the new zoom lays out, so no frame shows the old one.
+    if (layer.current) {
+      layer.current.style.transform = "";
+      layer.current.style.transformOrigin = "";
+    }
     if (target.page?.isConnected) {
       const box = element.getBoundingClientRect();
       const rect = target.page.getBoundingClientRect();
@@ -254,7 +264,7 @@ function usePinchZoom(
       element.scrollLeft = target.x - target.fx;
       element.scrollTop = target.y - target.fy;
     }
-  }, [zoom, viewport]);
+  }, [zoom, viewport, layer]);
   useEffect(() => {
     const element = viewport.current;
     if (!element) return;
@@ -323,9 +333,9 @@ function usePinchZoom(
       const [px, py] = [box.left + fx + dx, box.top + fy + dy];
       const page = document.elementFromPoint(px, py)?.closest(".canvas-wrap");
       const rect = page?.getBoundingClientRect();
-      preview("");
       const next = Math.round(zoomRef.current * scale);
-      if (next === zoomRef.current) return;
+      // Unchanged: drop the preview now; else the layout effect drops it with the new zoom.
+      if (next === zoomRef.current) return preview("");
       const ratio = next / zoomRef.current;
       anchor.current = {
         page: page ?? null,
@@ -338,14 +348,116 @@ function usePinchZoom(
       };
       setZoom(next);
     };
+    // Ctrl/⌘ + wheel zooms like the pinch, around the cursor; a Mac trackpad pinch arrives as the
+    // same ctrl+wheel. A plain wheel still scrolls: in «Лента» it is how one turns the pages. The
+    // preview follows each tick and the zoom is set once the wheel rests.
+    let rest: number | undefined;
+    // On a single sheet the preview shows the page where it will settle: centred while it fits the
+    // window, around the cursor once wider, never past the scroll edges. Zooming around the cursor
+    // alone would slide the page back to the centre (or the edge) when the zoom is set.
+    let sheet: {
+      page: Element;
+      rect: DOMRect;
+      origin: string;
+      u: number;
+      v: number;
+      cx: number;
+      cy: number;
+      top: number;
+      sides: number;
+      bottom: number;
+      scale: number;
+    } | null = null;
+    const settled = () => {
+      const box = element.getBoundingClientRect();
+      const s = sheet!;
+      const [width, height] = [s.rect.width * s.scale, s.rect.height * s.scale];
+      const [cw, ch] = [element.clientWidth, element.clientHeight];
+      const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
+      const left = width + 2 * s.sides <= cw
+        ? box.left + (cw - width) / 2
+        : clamp(s.cx - s.u * width, box.left + cw - s.sides - width, box.left + s.sides);
+      const top = s.top + height + s.bottom <= ch
+        ? box.top + s.top
+        : clamp(s.cy - s.v * height, box.top + ch - s.bottom - height, box.top + s.top);
+      return {left, top, box};
+    };
+    const settleSheet = () => {
+      const s = sheet!;
+      const next = Math.round(zoomRef.current * s.scale);
+      // Where the page settles at the rounded zoom, measured before the gesture is let go.
+      s.scale = next / zoomRef.current;
+      const {left, top, box} = settled();
+      sheet = null;
+      if (next === zoomRef.current) return preview("");
+      anchor.current = {page: s.page, u: 0, v: 0, x: 0, y: 0, fx: left - box.left, fy: top - box.top};
+      setZoom(next);
+    };
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      const delta = Math.max(-120, Math.min(120, event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY));
+      // The single sheet, even with the cursor on the grey around it.
+      const page = sheet?.page ?? element.querySelector(".sheet-inner .canvas-wrap");
+      if (page && !gesture) {
+        if (!sheet) {
+          const box = element.getBoundingClientRect();
+          const rect = page.getBoundingClientRect();
+          const inner = getComputedStyle(page.parentElement!);
+          const layerRect = layer.current!.getBoundingClientRect();
+          sheet = {
+            page,
+            rect,
+            origin: `${rect.left - layerRect.left}px ${rect.top - layerRect.top}px`,
+            // Off the sheet, its nearest edge stays put.
+            u: Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)),
+            v: Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height)),
+            cx: Math.min(rect.right, Math.max(rect.left, event.clientX)),
+            cy: Math.min(rect.bottom, Math.max(rect.top, event.clientY)),
+            top: rect.top - box.top + element.scrollTop,
+            sides: parseFloat(inner.paddingLeft) || 0,
+            bottom: parseFloat(inner.paddingBottom) || 0,
+            scale: 1,
+          };
+        }
+        sheet.scale = clampScale(sheet.scale * Math.pow(1.0019, -delta));
+        const {left, top} = settled();
+        let [dx, dy] = [left - sheet.rect.left, top - sheet.rect.top];
+        // A shrinking preview shrinks the scrollable area too and the browser pulls the scroll back,
+        // moving the sheet: measure where it landed and make up the difference.
+        for (let pass = 0; pass < 3; pass++) {
+          preview(`translate(${dx}px, ${dy}px) scale(${sheet.scale})`, sheet.origin);
+          const landed = sheet.page.getBoundingClientRect();
+          if (Math.abs(left - landed.left) < 0.5 && Math.abs(top - landed.top) < 0.5) break;
+          dx += left - landed.left;
+          dy += top - landed.top;
+        }
+        window.clearTimeout(rest);
+        rest = window.setTimeout(settleSheet, 250);
+        return;
+      }
+      if (!gesture) {
+        const rect = element.getBoundingClientRect();
+        const [fx, fy] = [event.clientX - rect.left, event.clientY - rect.top];
+        gesture = {distance: 0, scale: 1, x: element.scrollLeft + fx, y: element.scrollTop + fy, fx, fy, dx: 0, dy: 0};
+      }
+      // A mouse notch is ~100 px, a trackpad pinch step a few: about ×1.2 a notch, smooth on a pad.
+      gesture.scale = clampScale(gesture.scale * Math.pow(1.0019, -delta));
+      preview(`scale(${gesture.scale})`, `${gesture.x}px ${gesture.y}px`);
+      window.clearTimeout(rest);
+      rest = window.setTimeout(onEnd, 250);
+    };
     // Older iOS Safari zooms the whole page on its own gesture events.
     const blockGesture = (event: Event) => event.preventDefault();
+    element.addEventListener("wheel", onWheel, {passive: false});
     element.addEventListener("touchstart", onStart, {passive: false});
     element.addEventListener("touchmove", onMove, {passive: false});
     element.addEventListener("touchend", onEnd);
     element.addEventListener("touchcancel", onEnd);
     element.addEventListener("gesturestart", blockGesture);
     return () => {
+      window.clearTimeout(rest);
+      element.removeEventListener("wheel", onWheel);
       element.removeEventListener("touchstart", onStart);
       element.removeEventListener("touchmove", onMove);
       element.removeEventListener("touchend", onEnd);
@@ -749,7 +861,9 @@ function Reader({
       <footer className="reader-footer">
         <span>{issue.pages} страниц в PDF.</span>
         <span>
-          ← → листать <span className="shortcut">Esc закрыть</span>
+          ← → листать
+          <span className="shortcut">{/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl"} + колёсико — масштаб</span>
+          <span className="shortcut">Esc закрыть</span>
         </span>
       </footer>
     </main>
