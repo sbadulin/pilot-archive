@@ -169,16 +169,20 @@ function PdfCanvas({
           rotation: (sheet.rotate + rotation) % 360,
         });
         setRatio(viewport.width / viewport.height);
-        // Drawn aside and swapped in whole: resizing the visible canvas would blank it until done.
-        const drawing = document.createElement("canvas");
+        // A first drawing goes straight onto the canvas, visible as it comes. A redraw (a new zoom)
+        // is made aside and swapped in whole: resizing the visible canvas would blank the old one.
+        const redraw = target.width > 0;
+        const drawing = redraw ? document.createElement("canvas") : target;
         drawing.width = viewport.width;
         drawing.height = viewport.height;
         task = sheet.render({canvas: drawing, viewport});
         await task.promise;
         if (cancelled) return;
-        target.width = drawing.width;
-        target.height = drawing.height;
-        target.getContext("2d")?.drawImage(drawing, 0, 0);
+        if (redraw) {
+          target.width = drawing.width;
+          target.height = drawing.height;
+          target.getContext("2d")?.drawImage(drawing, 0, 0);
+        }
         setLoading(false);
         onSettled?.();
       } catch (e) {
