@@ -145,10 +145,11 @@ function PdfCanvas({
     let task:
       | ReturnType<Awaited<ReturnType<PDFDocumentProxy["getPage"]>>["render"]>
       | undefined;
-    setLoading(true);
     setError("");
     const target = canvas.current;
     if (!target) return;
+    // «Открываем страницу…» only over an empty sheet: on a zoom the old picture stays until the new one.
+    setLoading(target.width === 0);
     if (!near || hold) {
       target.width = 0;
       target.height = 0;
@@ -168,14 +169,18 @@ function PdfCanvas({
           rotation: (sheet.rotate + rotation) % 360,
         });
         setRatio(viewport.width / viewport.height);
-        target.width = viewport.width;
-        target.height = viewport.height;
-        task = sheet.render({canvas: target, viewport});
+        // Drawn aside and swapped in whole: resizing the visible canvas would blank it until done.
+        const drawing = document.createElement("canvas");
+        drawing.width = viewport.width;
+        drawing.height = viewport.height;
+        task = sheet.render({canvas: drawing, viewport});
         await task.promise;
-        if (!cancelled) {
-          setLoading(false);
-          onSettled?.();
-        }
+        if (cancelled) return;
+        target.width = drawing.width;
+        target.height = drawing.height;
+        target.getContext("2d")?.drawImage(drawing, 0, 0);
+        setLoading(false);
+        onSettled?.();
       } catch (e) {
         if (!cancelled && (e as Error).name !== "RenderingCancelledException") {
           setError("Не удалось показать страницу. Выберите её ещё раз.");
@@ -243,6 +248,11 @@ function usePinchZoom(
     const target = anchor.current;
     if (!element || !target) return;
     anchor.current = null;
+    // The preview goes in the same frame the new zoom lays out, so no frame shows the old one.
+    if (layer.current) {
+      layer.current.style.transform = "";
+      layer.current.style.transformOrigin = "";
+    }
     if (target.page?.isConnected) {
       const box = element.getBoundingClientRect();
       const rect = target.page.getBoundingClientRect();
@@ -254,7 +264,7 @@ function usePinchZoom(
       element.scrollLeft = target.x - target.fx;
       element.scrollTop = target.y - target.fy;
     }
-  }, [zoom, viewport]);
+  }, [zoom, viewport, layer]);
   useEffect(() => {
     const element = viewport.current;
     if (!element) return;
@@ -323,9 +333,9 @@ function usePinchZoom(
       const [px, py] = [box.left + fx + dx, box.top + fy + dy];
       const page = document.elementFromPoint(px, py)?.closest(".canvas-wrap");
       const rect = page?.getBoundingClientRect();
-      preview("");
       const next = Math.round(zoomRef.current * scale);
-      if (next === zoomRef.current) return;
+      // Unchanged: drop the preview now; else the layout effect drops it with the new zoom.
+      if (next === zoomRef.current) return preview("");
       const ratio = next / zoomRef.current;
       anchor.current = {
         page: page ?? null,
@@ -355,7 +365,7 @@ function usePinchZoom(
       gesture.scale = clampScale(gesture.scale * Math.pow(1.0019, -delta));
       preview(`scale(${gesture.scale})`, `${gesture.x}px ${gesture.y}px`);
       window.clearTimeout(rest);
-      rest = window.setTimeout(onEnd, 180);
+      rest = window.setTimeout(onEnd, 250);
     };
     // Older iOS Safari zooms the whole page on its own gesture events.
     const blockGesture = (event: Event) => event.preventDefault();
