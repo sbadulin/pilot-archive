@@ -861,7 +861,9 @@ function Reader({
       <footer className="reader-footer">
         <span>{issue.pages} страниц в PDF.</span>
         <span>
-          ← → листать <span className="shortcut">Esc закрыть</span>
+          ← → листать
+          <span className="shortcut">{/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl"} + колёсико — масштаб</span>
+          <span className="shortcut">Esc закрыть</span>
         </span>
       </footer>
     </main>
