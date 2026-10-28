@@ -338,14 +338,36 @@ function usePinchZoom(
       };
       setZoom(next);
     };
+    // Ctrl/⌘ + wheel zooms like the pinch, around the cursor; a Mac trackpad pinch arrives as the
+    // same ctrl+wheel. A plain wheel still scrolls: in «Лента» it is how one turns the pages. The
+    // preview follows each tick and the zoom is set once the wheel rests.
+    let rest: number | undefined;
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      if (!gesture) {
+        const rect = element.getBoundingClientRect();
+        const [fx, fy] = [event.clientX - rect.left, event.clientY - rect.top];
+        gesture = {distance: 0, scale: 1, x: element.scrollLeft + fx, y: element.scrollTop + fy, fx, fy, dx: 0, dy: 0};
+      }
+      // A mouse notch is ~100 px, a trackpad pinch step a few: about ×1.25 a notch, smooth on a pad.
+      const delta = Math.max(-120, Math.min(120, event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY));
+      gesture.scale = clampScale(gesture.scale * Math.pow(1.0019, -delta));
+      preview(`scale(${gesture.scale})`, `${gesture.x}px ${gesture.y}px`);
+      window.clearTimeout(rest);
+      rest = window.setTimeout(onEnd, 180);
+    };
     // Older iOS Safari zooms the whole page on its own gesture events.
     const blockGesture = (event: Event) => event.preventDefault();
+    element.addEventListener("wheel", onWheel, {passive: false});
     element.addEventListener("touchstart", onStart, {passive: false});
     element.addEventListener("touchmove", onMove, {passive: false});
     element.addEventListener("touchend", onEnd);
     element.addEventListener("touchcancel", onEnd);
     element.addEventListener("gesturestart", blockGesture);
     return () => {
+      window.clearTimeout(rest);
+      element.removeEventListener("wheel", onWheel);
       element.removeEventListener("touchstart", onStart);
       element.removeEventListener("touchmove", onMove);
       element.removeEventListener("touchend", onEnd);
