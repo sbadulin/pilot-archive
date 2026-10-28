@@ -352,16 +352,96 @@ function usePinchZoom(
     // same ctrl+wheel. A plain wheel still scrolls: in «Лента» it is how one turns the pages. The
     // preview follows each tick and the zoom is set once the wheel rests.
     let rest: number | undefined;
+    // On a single sheet the preview shows the page where it will settle: centred while it fits the
+    // window, around the cursor once wider, never past the scroll edges. Zooming around the cursor
+    // alone would slide the page back to the centre (or the edge) when the zoom is set.
+    let sheet: {
+      page: Element;
+      rect: DOMRect;
+      origin: string;
+      u: number;
+      v: number;
+      cx: number;
+      cy: number;
+      top: number;
+      sides: number;
+      bottom: number;
+      scale: number;
+    } | null = null;
+    const settled = () => {
+      const box = element.getBoundingClientRect();
+      const s = sheet!;
+      const [width, height] = [s.rect.width * s.scale, s.rect.height * s.scale];
+      const [cw, ch] = [element.clientWidth, element.clientHeight];
+      const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
+      const left = width + 2 * s.sides <= cw
+        ? box.left + (cw - width) / 2
+        : clamp(s.cx - s.u * width, box.left + cw - s.sides - width, box.left + s.sides);
+      const top = s.top + height + s.bottom <= ch
+        ? box.top + s.top
+        : clamp(s.cy - s.v * height, box.top + ch - s.bottom - height, box.top + s.top);
+      return {left, top, box};
+    };
+    const settleSheet = () => {
+      const s = sheet!;
+      const next = Math.round(zoomRef.current * s.scale);
+      // Where the page settles at the rounded zoom, measured before the gesture is let go.
+      s.scale = next / zoomRef.current;
+      const {left, top, box} = settled();
+      sheet = null;
+      if (next === zoomRef.current) return preview("");
+      anchor.current = {page: s.page, u: 0, v: 0, x: 0, y: 0, fx: left - box.left, fy: top - box.top};
+      setZoom(next);
+    };
     const onWheel = (event: WheelEvent) => {
       if (!event.ctrlKey && !event.metaKey) return;
       event.preventDefault();
+      const delta = Math.max(-120, Math.min(120, event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY));
+      // The single sheet, even with the cursor on the grey around it.
+      const page = sheet?.page ?? element.querySelector(".sheet-inner .canvas-wrap");
+      if (page && !gesture) {
+        if (!sheet) {
+          const box = element.getBoundingClientRect();
+          const rect = page.getBoundingClientRect();
+          const inner = getComputedStyle(page.parentElement!);
+          const layerRect = layer.current!.getBoundingClientRect();
+          sheet = {
+            page,
+            rect,
+            origin: `${rect.left - layerRect.left}px ${rect.top - layerRect.top}px`,
+            // Off the sheet, its nearest edge stays put.
+            u: Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)),
+            v: Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height)),
+            cx: Math.min(rect.right, Math.max(rect.left, event.clientX)),
+            cy: Math.min(rect.bottom, Math.max(rect.top, event.clientY)),
+            top: rect.top - box.top + element.scrollTop,
+            sides: parseFloat(inner.paddingLeft) || 0,
+            bottom: parseFloat(inner.paddingBottom) || 0,
+            scale: 1,
+          };
+        }
+        sheet.scale = clampScale(sheet.scale * Math.pow(1.0019, -delta));
+        const {left, top} = settled();
+        let [dx, dy] = [left - sheet.rect.left, top - sheet.rect.top];
+        // A shrinking preview shrinks the scrollable area too and the browser pulls the scroll back,
+        // moving the sheet: measure where it landed and make up the difference.
+        for (let pass = 0; pass < 3; pass++) {
+          preview(`translate(${dx}px, ${dy}px) scale(${sheet.scale})`, sheet.origin);
+          const landed = sheet.page.getBoundingClientRect();
+          if (Math.abs(left - landed.left) < 0.5 && Math.abs(top - landed.top) < 0.5) break;
+          dx += left - landed.left;
+          dy += top - landed.top;
+        }
+        window.clearTimeout(rest);
+        rest = window.setTimeout(settleSheet, 250);
+        return;
+      }
       if (!gesture) {
         const rect = element.getBoundingClientRect();
         const [fx, fy] = [event.clientX - rect.left, event.clientY - rect.top];
         gesture = {distance: 0, scale: 1, x: element.scrollLeft + fx, y: element.scrollTop + fy, fx, fy, dx: 0, dy: 0};
       }
-      // A mouse notch is ~100 px, a trackpad pinch step a few: about ×1.25 a notch, smooth on a pad.
-      const delta = Math.max(-120, Math.min(120, event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY));
+      // A mouse notch is ~100 px, a trackpad pinch step a few: about ×1.2 a notch, smooth on a pad.
       gesture.scale = clampScale(gesture.scale * Math.pow(1.0019, -delta));
       preview(`scale(${gesture.scale})`, `${gesture.x}px ${gesture.y}px`);
       window.clearTimeout(rest);
