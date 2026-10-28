@@ -156,7 +156,8 @@ export type Nick = { key: string; name: string; spellings: string[]; class: Nick
 // members: a shared editorial signature → who usually wrote under it («Пилоты»).
 // nicks: confirmed by the person as their own, so a profile even if it reads as a first name («Натуська»).
 // mentions: nick → the only messages that mention it, by id, for a nick many others share by name.
-export type NickRules = { aliases?: Record<string, string>; distinct?: string[][]; joint?: Record<string, string[]>; shared?: string[]; staff?: string[]; writers?: Record<string, string[]>; members?: Record<string, string[]>; nicks?: string[]; mentions?: Record<string, string[]> };
+// authors: a nick of someone from the newspaper → their name in the authors index («Злат» → «Захар ВЕСЕЛОВ»).
+export type NickRules = { aliases?: Record<string, string>; distinct?: string[][]; joint?: Record<string, string[]>; shared?: string[]; staff?: string[]; writers?: Record<string, string[]>; members?: Record<string, string[]>; nicks?: string[]; mentions?: Record<string, string[]>; authors?: Record<string, string> };
 
 const aliasOf = (core: string, rules: NickRules) =>
   Object.entries(rules.aliases ?? {}).find(([spelling]) => normalizeName(spelling) === normalizeName(core))?.[1] ?? null;

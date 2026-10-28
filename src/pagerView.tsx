@@ -9,6 +9,7 @@ import {
   MIN_QUERY,
   addressedTo,
   articlesOf,
+  authorOf,
   dateLabel,
   dialogsOf,
   excerptFor,
@@ -30,6 +31,7 @@ import {
   type PagerTab,
 } from "./pagerFeed";
 import {go, onRoute} from "./navigation";
+import {authorHref} from "./authorLink";
 import {pagerPath, pagerRouteOf, readableUrl} from "./pagerRoute";
 import type {PagerSite, SiteProfile} from "./pagerSite";
 
@@ -166,10 +168,20 @@ function Post({model, message}: {model: PagerModel; message: FeedMessage}) {
               {message.to.map((name, i) => {
                 const key = message.toKeys[i];
                 const profile = key ? model.profiles.get(key) : undefined;
+                // Someone from the newspaper without a pager profile leads to their author card.
+                const author = profile ? null : authorOf(model, name);
                 return (
                   <span key={`${name}-${i}`}>
                     {i ? ", " : ""}
-                    {profile ? <ProfileLink profile={profile}>{name}</ProfileLink> : name}
+                    {profile ? (
+                      <ProfileLink profile={profile}>{name}</ProfileLink>
+                    ) : author ? (
+                      <a className="pg-name" href={authorHref(author)} title={`${author}: в газете`}>
+                        {name}
+                      </a>
+                    ) : (
+                      name
+                    )}
                   </span>
                 );
               })}

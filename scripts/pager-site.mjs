@@ -33,7 +33,7 @@ const authors = /^https?:/.test(authorsSource)
   ? await (await fetch(authorsSource, { cache: 'no-store' })).json()
   : JSON.parse(await readFile(authorsSource, 'utf8'));
 
-const { exclude } = JSON.parse(await readFile(new URL('./pager-exclude.json', import.meta.url), 'utf8'));
+const { exclude, fixes } = JSON.parse(await readFile(new URL('./pager-exclude.json', import.meta.url), 'utf8'));
 
 // Two-page spreads per issue (scripts/spreads.mjs): links name printed pages, recognition sheets.
 const pdfs = await readdir(pdfRoot).catch(() => []);
@@ -45,7 +45,7 @@ for (const issue of new Set(messages.map((message) => `${message.year}-${message
   spreads[issue] = spreadSheets(join(pdfRoot, file));
 }
 
-const { site, stats } = buildPagerSite(messages, rules, authors, { exclude, spreads });
+const { site, stats } = buildPagerSite(messages, rules, authors, { exclude, fixes, spreads });
 // Search examples: the nicks with the most two-sided dialogs. One-sided ones are mostly words read
 // as nicks («Люблю», «Пока») collecting mentions, so they do not count except to break a tie.
 const model = preparePager(site);

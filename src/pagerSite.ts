@@ -32,7 +32,9 @@ export type SiteProfile = { key: string; name: string; spellings: string[]; mess
 // dates: issue key («2000-01-0066») → its date. spreads: issue key → its sheets scanned as two-page
 // spreads (as the reader detects them), so a link can name the printed page and not the sheet.
 // featured: profile names shown as search examples (scripts/pager-site.mjs picks them).
-export type PagerSite = { version: 1; dates: Record<string, string>; spreads?: Record<string, number[]>; featured?: string[]; messages: SiteMessage[]; profiles: SiteProfile[] };
+// authors: a nick of someone from the newspaper (normalized) → their name in the authors index, so the
+// nick links to the author card when it is not a pager profile itself (NickRules.authors).
+export type PagerSite = { version: 1; dates: Record<string, string>; spreads?: Record<string, number[]>; featured?: string[]; authors?: Record<string, string>; messages: SiteMessage[]; profiles: SiteProfile[] };
 
 // «2000-01-0066-p12-3» → the issue «2000-01-0066» and the sheet 12.
 export function messageWhere(id: string): { issue: string; sheet: number } {
@@ -51,6 +53,9 @@ export const isRunningHeader = (text: string) => /^\s*\d+\s+«ПП»\s+•/u.tes
 export type SiteOptions = {
   // Editorial texts recognized as messages (scripts/pager-exclude.json): id → why.
   exclude?: Record<string, string>;
+  // Hand corrections of what recognition got wrong (scripts/pager-exclude.json), by message id:
+  // «злат BOB» read as one addressee is «Злат» and «BOB».
+  fixes?: Record<string, { from?: string; to?: string[] }>;
   spreads?: Record<string, number[]>;
 };
 export type SiteStats = { total: number; kept: number; dropped: { hold: number; retold: number; duplicate: number; editorial: number }; profiles: number; withArticles: number };
@@ -92,7 +97,8 @@ function spreadsOf(dates: Record<string, string>, spreads: Record<string, number
 export function buildPagerSite(all: PublicPagerMessage[], rules: NickRules, authors: AuthorsIndex, options: SiteOptions = {}): { site: PagerSite; stats: SiteStats } {
   const dropped = { hold: 0, retold: 0, duplicate: 0, editorial: 0 };
   const kept: PublicPagerMessage[] = [];
-  for (const message of all) {
+  for (const recognized of all) {
+    const message = options.fixes?.[recognized.id] ? { ...recognized, ...options.fixes[recognized.id] } : recognized;
     if (options.exclude?.[message.id] || isRunningHeader(message.text)) { dropped.editorial++; continue; }
     if (isRetold(message.text)) { dropped.retold++; continue; }
     if (message.hold) { dropped.hold++; continue; }
@@ -169,7 +175,14 @@ export function buildPagerSite(all: PublicPagerMessage[], rules: NickRules, auth
     });
 
   return {
-    site: { version: 1, dates, ...spreadsOf(dates, options.spreads), messages, profiles },
+    site: {
+      version: 1,
+      dates,
+      ...spreadsOf(dates, options.spreads),
+      ...(rules.authors ? { authors: Object.fromEntries(Object.entries(rules.authors).map(([nick, author]) => [normalizeName(nick), author])) } : {}),
+      messages,
+      profiles,
+    },
     stats: { total: all.length, kept: messages.length, dropped, profiles: profiles.length, withArticles: profiles.filter((profile) => profile.articles.length).length },
   };
 }
