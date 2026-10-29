@@ -170,9 +170,9 @@ for (const [issue, messages] of byIssue) {
   // ищется место плашки, когда tesseract слова под ней не прочитал.
   const quotesOf = reason =>
     [...(reason ?? '').matchAll(/«([^«»]+)»/g)].flatMap(found => found[1].split(/…|\.\.\./)).map(part => part.trim()).filter(part => tokenize(part).length);
-  const closeQuotes = (states, item, kind) => {
+  const closeQuotes = (states, item, kind, quotes = quotesOf(item.reason)) => {
     const closedIn = new Set();
-    for (const quote of quotesOf(item.reason)) {
+    for (const quote of quotes) {
       const query = queryFromPhrase(quote);
       for (const state of states) {
         for (const field of FIELDS) {
@@ -285,6 +285,15 @@ for (const [issue, messages] of byIssue) {
         if (best.length && best[0].found.matched < best[0].found.covered) {
           item.partial = `${best[0].found.matched}/${best[0].found.covered}`;
           item.closedIn = best.map(hit => hit.state);
+        }
+      }
+      // Слова, которые tesseract под плашкой не прочитал («убей себя!» перед прочитанным «Так всем»):
+      // решение перечисляет их в `text`, и они закрываются в сообщениях под плашкой.
+      if (item.text) {
+        const byText = closeQuotes(near(item.sheet, box => inside(at, box)), item, 'box', item.text);
+        if (byText.length) {
+          located ||= byText.length;
+          delete item.partial;
         }
       }
       if (!located) {
