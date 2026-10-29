@@ -52,7 +52,7 @@ const fixture: PublicPagerMessage[] = [
   at(9, 'Hidden', [], 'Задержано цензурой.', { hold: true }),
   at(10, 'Retold', [], '[пересказ] Кто-то кому-то что-то.'),
   at(11, 'Soratnik', ['Bad Boy'], 'Bad Boy, ты где?'),
-  at(12, 'Bad Boy', [], 'Я тут.'),
+  at(12, 'Bad Boy', [], 'Я тут. Как вам новый альбом BAD. B? Bad Balance рулит.'),
 ];
 
 const authors = {
@@ -167,6 +167,7 @@ test('mentions: addressed or named, never own, longer nicks cut out first', () =
   assert.ok(texts.includes('Атака в лице BAD`a!'));
   assert.ok(!texts.includes('Bad Girl вернулась!'), 'Bad Girl is another nick');
   assert.ok(!texts.includes('Bad Boy, ты где?'), 'Bad Boy is another nick');
+  assert.ok(!texts.some((text) => text.includes('BAD. B?')), 'Bad Balance («BAD. B») is a band');
   assert.ok(!texts.some((text) => text.startsWith('Kurt, как-нибудь')), 'own messages are not mentions');
 });
 
