@@ -98,6 +98,8 @@ const remarkPattern = (names: string[]) =>
 // editorial («Пилоты»): such names only find addressees.
 const NEWSPAPER = /^(?:пилот|пп)$/iu;
 const TITLE = /«\s*(?:Пилот|ПП)[^»]*»/giu;
+// The rap band Bad Balance, also shortened to «BAD. B» or «Bad B.»: not the reader BAD.
+const BANDS = /Bad\.?\s*(?:Balance|B(?![\p{L}\p{N}]))\.?|Бэд\s*Бэлэнс/giu;
 const profileNames = (profile: SiteProfile) => [...new Set([profile.name, ...profile.spellings, ...(profile.aka ?? [])].filter((name) => name.trim()))];
 
 /** Messages of other readers with a remark by the profile, oldest first; only the editorial made them. */
@@ -139,7 +141,7 @@ export function mentionsOf(model: PagerModel, key: string): FeedMessage[] {
     const from = message.from?.trim() ?? '';
     const described = names.some((name) => withAdjectives(nickCore(from), name));
     const signature = from && !described ? [new RegExp(escapeRegExp(from), 'giu')] : [];
-    const text = [remarks, TITLE, ...signature, ...longer].reduce((acc, pattern) => acc.replace(pattern, ' '), message.text);
+    const text = [remarks, TITLE, BANDS, ...signature, ...longer].reduce((acc, pattern) => acc.replace(pattern, ' '), message.text);
     return patterns.some((pattern) => pattern.test(text));
   });
 }
