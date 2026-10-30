@@ -64,8 +64,11 @@ function parseJson(text) {
 // Плотную полосу (пейджер целиком) Claude иногда отказывается переписывать — «слишком длинный
 // фрагмент», а на ужатой картинке мелкий шрифт не читается. Тогда режем полосу на вертикальные
 // полосы с нахлёстом при 300 dpi и читаем по кускам, пересчитывая рамки в проценты полосы.
+// Материал оставляет та полоса, в чью треть ширины попадает центр его рамки. Нахлёст больше
+// половины колонки (их на полосе пейджера пять, ~18% ширины), поэтому своя полоса видит колонку
+// целиком: при 4% у №32 (0201) срезались первые буквы строк второй колонки — «[неразборчиво]».
 const STRIPS = 3;
-const OVERLAP = 0.04;
+const OVERLAP = 0.1;
 
 async function readTextInStrips(page) {
   const full = join(dir, `page-${pad(page)}-strips.png`);
@@ -89,6 +92,8 @@ async function readTextInStrips(page) {
       if (Array.isArray(article.box)) {
         const [l, t, r, b] = article.box;
         article.box = [left * 100 + (l * (right - left)), t, left * 100 + (r * (right - left)), b].map(v => Math.round(v * 10) / 10);
+        const center = (article.box[0] + article.box[2]) / 200;
+        if (center < index / STRIPS || center >= (index + 1) / STRIPS) continue;
       }
       // Нахлёст: один материал мог попасть в две полосы — оставляем первое вхождение.
       const key = (article.text ?? '').slice(0, 80);

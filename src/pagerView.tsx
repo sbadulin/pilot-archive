@@ -1,5 +1,5 @@
-// The «Пейджер» section: a feed of readers' pager messages, oldest first, with a profile for
-// every unique nick. Loaded as a separate chunk; pager.json is fetched on the first open.
+// The «Пейджер» section: a feed of readers' pager messages, newest first unless the reader turns it
+// around, with a filter by months and a profile for every unique nick. Loaded as a separate chunk; pager.json is fetched on the first open.
 import {useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
 import {ArrowLeft, AtSign, Check, FileText, Link, MessageSquare, MessageSquareQuote, MessagesSquare, Search, X} from "lucide-react";
 import {pagerUrl} from "./config";
@@ -13,10 +13,13 @@ import {
   dateLabel,
   dialogsOf,
   excerptFor,
+  inOrder,
+  inRange,
   issueParts,
   mentionsOf,
   remarksOf,
   monthLabel,
+  monthRange,
   pagerSearchIndex,
   plural,
   pluralWord,
@@ -25,6 +28,7 @@ import {
   searchPager,
   type Dialog,
   type FeedMessage,
+  type FeedOrder,
   type PagerHit,
   type PagerModel,
   type PagerRoute,
@@ -232,6 +236,90 @@ function Feed({model, messages}: {model: PagerModel; messages: FeedMessage[]}) {
         </section>
       ))}
       {more}
+    </div>
+  );
+}
+
+// The reader's choice of order outlives the visit; without storage it lasts until a reload.
+const ORDER_KEY = "pilot-pager-order";
+function readOrder(): FeedOrder {
+  try {
+    return localStorage.getItem(ORDER_KEY) === "old" ? "old" : "new";
+  } catch {
+    return "new";
+  }
+}
+function useOrder() {
+  const [order, setOrder] = useState(readOrder);
+  const choose = (next: FeedOrder) => {
+    setOrder(next);
+    try {
+      localStorage.setItem(ORDER_KEY, next);
+    } catch {
+      // The order stays for this page only.
+    }
+  };
+  return [order, choose] as const;
+}
+
+// Months grouped by year: «2000» → «Январь 2000», ….
+function MonthOptions({months}: {months: string[]}) {
+  const years = [...new Set(months.map((month) => month.slice(0, 4)))];
+  return years.map((year) => (
+    <optgroup key={year} label={year}>
+      {months
+        .filter((month) => month.startsWith(year))
+        .map((month) => (
+          <option key={month} value={month}>
+            {monthLabel(month)}
+          </option>
+        ))}
+    </optgroup>
+  ));
+}
+
+type FeedControlsProps = {months: string[]; order: FeedOrder; onOrder: (order: FeedOrder) => void; from: string; to: string; onRange: (from: string, to: string) => void};
+function FeedControls({months, order, onOrder, from, to, onRange}: FeedControlsProps) {
+  // A bound past the other one moves it along, so the range never turns inside out.
+  const setFrom = (value: string) => onRange(value, to && value > to ? value : to);
+  const setTo = (value: string) => onRange(from && value && value < from ? value : from, value);
+  return (
+    <div className="pg-controls">
+      <div className="pg-order" role="group" aria-label="Порядок сообщений">
+        {(
+          [
+            ["new", "Сначала новые"],
+            ["old", "Сначала старые"],
+          ] as const
+        ).map(([value, label]) => (
+          <button key={value} type="button" className={order === value ? "on" : ""} aria-pressed={order === value} onClick={() => onOrder(value)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {months.length > 1 && (
+        <div className="pg-range">
+          <label>
+            с
+            <select value={from} onChange={(event) => setFrom(event.target.value)}>
+              <option value="">начала</option>
+              <MonthOptions months={months} />
+            </select>
+          </label>
+          <label>
+            по
+            <select value={to} onChange={(event) => setTo(event.target.value)}>
+              <option value="">последний номер</option>
+              <MonthOptions months={months} />
+            </select>
+          </label>
+          {(from || to) && (
+            <button type="button" onClick={() => onRange("", "")}>
+              <X size={14} aria-hidden="true" /> все даты
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -498,8 +586,7 @@ function Intro({model, compact}: {model: PagerModel | null; compact: boolean}) {
       <span className="black-label">Pager</span>
       <h2>Пейджер</h2>
       <p>
-        Приветы, ответы и перебранки читателей «Пилота» — от первых номеров к последним. Ник, у которого есть профиль, —
-        ссылка.
+        Приветы, ответы и перебранки читателей «Пилота» из всех номеров архива. Ник, у которого есть профиль, — ссылка.
       </p>
       {model && <p className="pg-count">{plural(model.messages.length, "сообщение", "сообщения", "сообщений")}</p>}
     </div>
@@ -556,7 +643,24 @@ export default function PagerSection({issues}: {issues: Issue[]}) {
     window.scrollTo(0, onFeed ? feedScroll.current : 0);
   }, [onFeed, route.nick]);
 
-  const shown = useMemo(() => (model ? (addressee ? addressedTo(model, addressee.key) : model.messages) : []), [model, addressee]);
+  const [order, setOrder] = useOrder();
+  const [range, setRange] = useState({from: "", to: ""});
+  // The filter spans the archive's issues, oldest to newest; a special issue has no real date.
+  const months = useMemo(
+    () => monthRange([...issues.filter((issue) => !isSpecial(issue)).map((issue) => issue.date), ...(model?.messages.map((message) => message.date) ?? [])]),
+    [issues, model],
+  );
+  const shown = useMemo(() => {
+    if (!model) return [];
+    const messages = addressee ? addressedTo(model, addressee.key) : model.messages;
+    return inOrder(inRange(messages, range.from, range.to), order);
+  }, [model, addressee, range, order]);
+  // A new order or range starts the feed from its top.
+  const reshape = (change: () => void) => {
+    feedScroll.current = 0;
+    change();
+    window.scrollTo(0, 0);
+  };
 
   const chooseAddressee = (hit: PagerHit) => {
     feedScroll.current = 0;
@@ -583,6 +687,14 @@ export default function PagerSection({issues}: {issues: Issue[]}) {
         )}
         {model && (
           <div hidden={!onFeed}>
+            <FeedControls
+              months={months}
+              order={order}
+              onOrder={(next) => reshape(() => setOrder(next))}
+              from={range.from}
+              to={range.to}
+              onRange={(from, to) => reshape(() => setRange({from, to}))}
+            />
             {addressee && (
               <p className="pg-filter">
                 <span>
@@ -593,7 +705,11 @@ export default function PagerSection({issues}: {issues: Issue[]}) {
                 </button>
               </p>
             )}
-            <Feed key={addressee?.key ?? ""} model={model} messages={shown} />
+            {shown.length ? (
+              <Feed key={`${addressee?.key ?? ""}|${order}|${range.from}|${range.to}`} model={model} messages={shown} />
+            ) : (
+              <p className="pg-muted pg-status">За эти месяцы сообщений нет.</p>
+            )}
           </div>
         )}
         {model && route.nick && !profile && (

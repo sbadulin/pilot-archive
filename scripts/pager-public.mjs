@@ -38,6 +38,7 @@ import {
   applySpans,
   censorAlso,
   closedWordsOf,
+  joinSheetSeams,
   locateRange,
   nameSpans,
   normToken,
@@ -289,8 +290,11 @@ for (const [issue, messages] of byIssue) {
       }
       // Слова, которые tesseract под плашкой не прочитал («убей себя!» перед прочитанным «Так всем»):
       // решение перечисляет их в `text`, и они закрываются в сообщениях под плашкой.
+      // Рамки материалов у Claude приблизительные, и сообщение под плашкой бывает в соседней рамке
+      // (телефон Виктоши в №32 (0201)): тогда явные слова ищутся по всей полосе.
       if (item.text) {
-        const byText = closeQuotes(near(item.sheet, box => inside(at, box)), item, 'box', item.text);
+        let byText = closeQuotes(near(item.sheet, box => inside(at, box)), item, 'box', item.text);
+        if (!byText.length) byText = closeQuotes(sheetStates(item.sheet), item, 'box', item.text);
         if (byText.length) {
           located ||= byText.length;
           delete item.partial;
@@ -398,6 +402,16 @@ for (const [issue, messages] of byIssue) {
   }
 }
 
+// Хвост сообщения, разорванного между полосами, уходит к его началу — уже закрытым: каждый
+// кусок прошёл цензуру своей полосы. id остальных сообщений не меняются. Слово, собранное на
+// стыке, цензура не видела целиком: с заглавной (имя, фамилия) или с находкой сканера — hold.
+const joined = joinSheetSeams(publicIndex, (message, seam) => {
+  const word = seam.text.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+  if (!(seam.word && /^\p{Lu}/u.test(word)) && !findRisks(seam.text).length) return;
+  message.hold = true;
+  review.push({ issue: `${message.year}-${message.number}-${message.serial}`, sheet: message.sheet, kind: 'seam', problem: 'seam-word', id: message.id, value: seam.text });
+});
+publicIndex.splice(0, publicIndex.length, ...joined);
 await writeFile(join(cacheRoot, 'pager-public.json'), JSON.stringify(publicIndex, null, 2));
 const redactedMessages = publicIndex.filter(message => message.redactions.length).length;
 const held = publicIndex.filter(message => message.hold).length;
@@ -416,6 +430,7 @@ const problemText = {
   'find-fuzzy': 'точного вхождения фразы нет, закрыто лучшее нечёткое — проверить',
   'region-closed-whole': 'начало или конец области не найдены — сообщения закрыты целиком',
   'from-untouched': 'подпись лежит в закрытом куске текста, но в from открыта',
+  'seam-word': 'сообщение склеено из двух полос, слово на стыке цензура целиком не видела — проверить',
 };
 const md = [
   '# Пейджер: проверка цензуры',

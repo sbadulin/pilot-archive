@@ -10,6 +10,7 @@ import {
   rangeSpans,
   censorAlso,
   closedWordsOf,
+  joinSheetSeams,
   messageId,
   nameSpans,
   parseWords,
@@ -53,8 +54,59 @@ test('editorial pieces with a title stay whole; short messages are untouched', (
   assert.equal(pieces[1].title, null);
 });
 
+test('a short column where every paragraph is numbered is still several messages', () => {
+  const pieces = splitArticles([{ text: '15. Люблю Мариночку! Дима.\n\n16. Люблю! Люблю! Крутень.\n\n17. Троих? Моралист ПТ.' }]);
+  assert.deepEqual(pieces.map(piece => piece.seq), [15, 16, 17]);
+  assert.equal(splitArticles([{ title: 'ПРАВИЛА', text: '1. Не более 25 слов.\n\n2. Разборчиво.\n\n3. Без телефонов.' }]).length, 1);
+});
+
+test('an unnumbered piece after an unfinished numbered message is its tail, past the coupon form', () => {
+  const pieces = splitArticles([
+    { text: '43. Ура! Вероника.\n\n44. Тебе 17 лет. ПТ.\n\n45. Всех с НГ! Привет для' },
+    { title: 'Сначала прочти правила на обороте!', text: 'не более 25 слов' },
+    { text: 'Кисы в г. Иркутск!', byline: 'КиМ' },
+    { text: '46. Хай!', byline: 'Тутта Ларсен' },
+  ]);
+  const tail = pieces.find(piece => piece.text.endsWith('Привет для Кисы в г. Иркутск!'));
+  assert.ok(tail);
+  assert.equal(tail.byline, 'КиМ');
+  assert.ok(!pieces.some(piece => piece.text === 'Кисы в г. Иркутск!'));
+  // A signed message is finished: the next unnumbered piece is a message of its own.
+  assert.equal(splitArticles([{ text: '251. Девчонки, напишите! Смотри', byline: 'М-202.' }, { text: 'Ветер, перестань дуть!', byline: 'ТВОИ ДРУЗЬЯ.' }]).length, 2);
+});
+
 test('message ids are stable strings per issue, sheet and position', () => {
   assert.equal(messageId({ year: 2000, number: '22', serial: '0087' }, 9, 14), '2000-22-0087-p9-14');
+});
+
+test('a message torn between two sheets of one issue is joined, the word break undone', () => {
+  const at = (serial: string, sheet: number, n: number, text: string, from: string | null = null) =>
+    ({ id: `2002-32-${serial}-p${sheet}-${n}`, year: 2002, number: '32', serial, sheet, text, from, to: [] as string[], byline: null });
+  const joined = joinSheetSeams([
+    at('0201', 10, 64, '83. Чайф: «Не дай мне повод подойти слишком близ-'),
+    at('0201', 23, 1, 'ко!» ПТ.', 'ПТ'),
+    at('0201', 23, 2, 'Лучше поздно, чем никогда. ЛСД.', 'ЛСД'),
+    at('0201', 23, 3, 'хвост внутри полосы — не стык.'),
+    at('0202', 9, 1, 'другой номер со строчной.'),
+  ]);
+  assert.deepEqual(joined.map(message => message.id), ['2002-32-0201-p10-64', '2002-32-0201-p23-2', '2002-32-0201-p23-3', '2002-32-0202-p9-1']);
+  assert.equal(joined[0].text, '83. Чайф: «Не дай мне повод подойти слишком близко!» ПТ.');
+  assert.equal(joined[0].from, 'ПТ');
+  // The word put together at the seam is reported for a second check: «Петро-» | «вой» is a surname.
+  const seams: { text: string; word: boolean }[] = [];
+  joinSheetSeams([at('0201', 10, 1, 'Привет Маше Петро-'), at('0201', 23, 1, 'вой! Лена.')], (_, seam) => seams.push(seam));
+  joinSheetSeams([at('0201', 10, 1, 'Передай привет'), at('0201', 23, 1, 'всем. Лена.')], (_, seam) => seams.push(seam));
+  assert.deepEqual(seams, [{ text: 'Петровой!', word: true }, { text: 'привет всем.', word: false }]);
+  // The pieces are joined after censorship: a hold or a closure on either side carries over.
+  const censored = joinSheetSeams([
+    { ...at('0201', 10, 64, 'Позвони мне на █████, мой номер не забудь, а то я так и не'), redactions: [{ kind: 'find' }] },
+    { ...at('0201', 23, 1, 'дождусь. ПТ.'), hold: true },
+  ]);
+  assert.equal(censored.length, 1);
+  assert.equal(censored[0].hold, true);
+  assert.equal(censored[0].redactions?.length, 1);
+  // A finished message before the seam stays apart, whatever starts the next sheet.
+  assert.equal(joinSheetSeams([at('0201', 10, 1, 'Конец. Лена.'), at('0201', 23, 1, 'и ещё.')]).length, 2);
 });
 
 const tsv = [

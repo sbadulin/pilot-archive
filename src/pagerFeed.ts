@@ -58,6 +58,33 @@ export function preparePager(site: PagerSite): PagerModel {
   return model;
 }
 
+// The feed's order: newest issues first by default. Within one issue messages stay in the
+// printed order either way (the sort is stable), so a page still reads top to bottom.
+export type FeedOrder = 'new' | 'old';
+export const inOrder = (messages: FeedMessage[], order: FeedOrder) =>
+  order === 'old' ? messages : [...messages].sort((a, b) => b.date.localeCompare(a.date));
+
+/**
+ * Every month («2000-03») from the oldest date to the newest, gaps included: the date filter
+ * offers the archive's whole run. The caller leaves special issues out (their date only orders them).
+ */
+export function monthRange(dates: string[]): string[] {
+  const months = dates.map((date) => date.slice(0, 7)).filter((month) => /^\d{4}-\d{2}$/.test(month)).sort();
+  if (!months.length) return [];
+  const [last] = months.slice(-1);
+  const range: string[] = [];
+  for (let year = Number(months[0].slice(0, 4)), month = Number(months[0].slice(5, 7)); ; month++) {
+    if (month > 12) [year, month] = [year + 1, 1];
+    const value = `${year}-${String(month).padStart(2, '0')}`;
+    range.push(value);
+    if (value >= last) return range;
+  }
+}
+
+// Messages from month `from` to month `to`, both included; an empty bound is open.
+export const inRange = (messages: FeedMessage[], from: string, to: string) =>
+  from || to ? messages.filter(({ date }) => (!from || date.slice(0, 7) >= from) && (!to || date.slice(0, 7) <= to)) : messages;
+
 // The profile a printed name belongs to («Icepac (лэйбл Outlow)» → ICEPAC), or null.
 export function profileOf(model: PagerModel, name: string): string | null {
   const find = (value: string) => model.byName.get(foldCase(normalizeName(value)));
