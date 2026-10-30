@@ -107,7 +107,9 @@ export function splitArticles(articles: PagerArticle[]): PagerPiece[] {
 // (№32 (0201): «…подойти слишком близ-» в конце полосы 10, «ко!» ПТ.» в начале полосы 23).
 // Первое сообщение полосы со строчной буквы, когда последнее сообщение предыдущей полосы того же
 // номера не закончено, — его хвост: приклеивается к нему, перенос слова снимается.
-type SeamMessage = { year: number; number: string; serial: string; sheet: number; text: string; from: string | null; to: string[]; byline: string | null };
+// Клеятся уже закрытые тексты (pager-public.mjs, после цензуры): каждый кусок закрыт решениями
+// своей полосы, а hold любого из них держит всё сообщение.
+type SeamMessage = { year: number; number: string; serial: string; sheet: number; text: string; from: string | null; to: string[]; byline: string | null; hold?: boolean; redactions?: unknown[] };
 export function joinSheetSeams<T extends SeamMessage>(messages: T[]): T[] {
   const joined: T[] = [];
   for (const message of messages) {
@@ -120,6 +122,8 @@ export function joinSheetSeams<T extends SeamMessage>(messages: T[]): T[] {
       last.from ??= message.from;
       last.byline ??= message.byline;
       last.to = [...new Set([...last.to, ...message.to])];
+      if (message.hold) last.hold = true;
+      if (message.redactions?.length) last.redactions = [...(last.redactions ?? []), ...message.redactions];
       continue;
     }
     joined.push(message);

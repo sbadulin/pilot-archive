@@ -38,6 +38,7 @@ import {
   applySpans,
   censorAlso,
   closedWordsOf,
+  joinSheetSeams,
   locateRange,
   nameSpans,
   normToken,
@@ -401,6 +402,10 @@ for (const [issue, messages] of byIssue) {
   }
 }
 
+// Хвост сообщения, разорванного между полосами, уходит к его началу — уже закрытым: каждый
+// кусок прошёл цензуру своей полосы. id остальных сообщений не меняются.
+const joined = joinSheetSeams(publicIndex);
+publicIndex.splice(0, publicIndex.length, ...joined);
 await writeFile(join(cacheRoot, 'pager-public.json'), JSON.stringify(publicIndex, null, 2));
 const redactedMessages = publicIndex.filter(message => message.redactions.length).length;
 const held = publicIndex.filter(message => message.hold).length;

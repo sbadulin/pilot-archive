@@ -92,6 +92,14 @@ test('a message torn between two sheets of one issue is joined, the word break u
   assert.deepEqual(joined.map(message => message.id), ['2002-32-0201-p10-64', '2002-32-0201-p23-2', '2002-32-0201-p23-3', '2002-32-0202-p9-1']);
   assert.equal(joined[0].text, '83. Чайф: «Не дай мне повод подойти слишком близко!» ПТ.');
   assert.equal(joined[0].from, 'ПТ');
+  // The pieces are joined after censorship: a hold or a closure on either side carries over.
+  const censored = joinSheetSeams([
+    { ...at('0201', 10, 64, 'Позвони мне на █████, мой номер не забудь, а то я так и не'), redactions: [{ kind: 'find' }] },
+    { ...at('0201', 23, 1, 'дождусь. ПТ.'), hold: true },
+  ]);
+  assert.equal(censored.length, 1);
+  assert.equal(censored[0].hold, true);
+  assert.equal(censored[0].redactions?.length, 1);
   // A finished message before the seam stays apart, whatever starts the next sheet.
   assert.equal(joinSheetSeams([at('0201', 10, 1, 'Конец. Лена.'), at('0201', 23, 1, 'и ещё.')]).length, 2);
 });
