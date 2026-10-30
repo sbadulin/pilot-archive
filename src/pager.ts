@@ -29,8 +29,10 @@ const paragraphs = (text: string) =>
 export function isGlued(article: PagerArticle): boolean {
   const text = article.text ?? '';
   const parts = paragraphs(text);
-  if (text.length < 1000 || parts.length < 5) return false;
   const numbered = parts.filter(part => NUMBERED.test(part)).length;
+  // Каждый абзац — с номером: несколько сообщений, даже короткие («15.»–«20.» в №32 (0201)).
+  if (parts.length >= 3 && numbered === parts.length && (!article.title?.trim() || NUMBER_TITLE.test(article.title))) return true;
+  if (text.length < 1000 || parts.length < 5) return false;
   // С заголовком режем только сквозную нумерацию («Комсомольск-на-Амуре» над № 106–115):
   // материал «Девочка-тинейджер, позвони на пейджер!!!» с «■»-шутками — одна заметка.
   if (article.title?.trim() && !NUMBER_TITLE.test(article.title)) return numbered * 2 >= parts.length;
@@ -63,6 +65,19 @@ export function splitArticles(articles: PagerArticle[]): PagerPiece[] {
     const titleNumber = NUMBER_TITLE.exec(article.title ?? '');
     const title = titleNumber ? null : article.title?.trim() || null;
     const byline = article.byline?.trim() || null;
+    // Материал без номера и заголовка после незаконченного нумерованного сообщения — его хвост
+    // из следующей колонки («…Привет для» | «Кисы в г. Иркутск! …» КиМ в №32 (0201)). Материалы
+    // редакции с заголовком между ними (бланк купона внизу колонки) перешагиваются.
+    let at = pieces.length - 1;
+    while (at >= 0 && pieces[at].title && pieces[at].seq === null && !NUMBERED.test(pieces[at].text)) at -= 1;
+    const last = pieces[at];
+    // Подписанное сообщение закончено: «Ветер, перестань дуть!…» после «251. … М-202» — отдельное.
+    const numberedLast = last && !last.byline && (last.seq !== null || NUMBERED.test(last.text));
+    if (numberedLast && !title && !titleNumber && !NUMBERED.test(text) && !/[.!?…)»"'”]\s*$/u.test(last.text)) {
+      last.text = `${last.text} ${text}`;
+      last.byline ??= byline;
+      return;
+    }
     if (!isGlued(article)) {
       pieces.push({ article: index, seq: titleNumber ? Number(titleNumber[1]) : null, title, text, byline });
       return;
@@ -86,6 +101,30 @@ export function splitArticles(articles: PagerArticle[]): PagerPiece[] {
     if (byline && own) pieces[pieces.length - 1].byline = byline;
   });
   return pieces;
+}
+
+// Пейджер номера бывает разнесён по полосам, и сообщение рвётся на стыке посреди слова
+// (№32 (0201): «…подойти слишком близ-» в конце полосы 10, «ко!» ПТ.» в начале полосы 23).
+// Первое сообщение полосы со строчной буквы, когда последнее сообщение предыдущей полосы того же
+// номера не закончено, — его хвост: приклеивается к нему, перенос слова снимается.
+type SeamMessage = { year: number; number: string; serial: string; sheet: number; text: string; from: string | null; to: string[]; byline: string | null };
+export function joinSheetSeams<T extends SeamMessage>(messages: T[]): T[] {
+  const joined: T[] = [];
+  for (const message of messages) {
+    const last = joined[joined.length - 1];
+    const seam = last && last.serial === message.serial && last.year === message.year && last.sheet !== message.sheet;
+    if (seam && /^[\p{Ll}…,;:–—]/u.test(message.text.trim()) && !/[.!?…)»"'”]\s*$/u.test(last.text)) {
+      const head = last.text.trimEnd();
+      const tail = message.text.trimStart();
+      last.text = /\p{L}-$/u.test(head) ? `${head.slice(0, -1)}${tail}` : `${head} ${tail}`;
+      last.from ??= message.from;
+      last.byline ??= message.byline;
+      last.to = [...new Set([...last.to, ...message.to])];
+      continue;
+    }
+    joined.push(message);
+  }
+  return joined;
 }
 
 export const messageId = (issue: { year: number; number: string; serial: string }, sheet: number, n: number) =>

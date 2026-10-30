@@ -16,7 +16,7 @@ import { promisify } from 'node:util';
 import { access, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { isGlued, messageId, splitArticles } from '../src/pager.ts';
+import { isGlued, joinSheetSeams, messageId, splitArticles } from '../src/pager.ts';
 
 const run = promisify(execFile);
 const args = process.argv.slice(2);
@@ -153,5 +153,7 @@ for (const task of tasks) {
     });
   });
 }
-await writeFile(join(cacheRoot, 'pager-index.json'), JSON.stringify(index, null, 2));
-console.log(`Pager index: ${index.length} messages from ${results.size} of ${tasks.length} pages → ${join(cacheRoot, 'pager-index.json')}`);
+// Хвост сообщения, разорванного между полосами, уходит к его началу; id остальных не меняются.
+const messages = joinSheetSeams(index);
+await writeFile(join(cacheRoot, 'pager-index.json'), JSON.stringify(messages, null, 2));
+console.log(`Pager index: ${messages.length} messages from ${results.size} of ${tasks.length} pages → ${join(cacheRoot, 'pager-index.json')}`);

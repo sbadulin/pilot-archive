@@ -289,8 +289,11 @@ for (const [issue, messages] of byIssue) {
       }
       // Слова, которые tesseract под плашкой не прочитал («убей себя!» перед прочитанным «Так всем»):
       // решение перечисляет их в `text`, и они закрываются в сообщениях под плашкой.
+      // Рамки материалов у Claude приблизительные, и сообщение под плашкой бывает в соседней рамке
+      // (телефон Виктоши в №32 (0201)): тогда явные слова ищутся по всей полосе.
       if (item.text) {
-        const byText = closeQuotes(near(item.sheet, box => inside(at, box)), item, 'box', item.text);
+        let byText = closeQuotes(near(item.sheet, box => inside(at, box)), item, 'box', item.text);
+        if (!byText.length) byText = closeQuotes(sheetStates(item.sheet), item, 'box', item.text);
         if (byText.length) {
           located ||= byText.length;
           delete item.partial;
