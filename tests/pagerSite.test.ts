@@ -9,12 +9,15 @@ import {
   authorOf,
   dialogsOf,
   excerptFor,
+  inOrder,
+  inRange,
   isSearchableAddressee,
   mentionsOf,
   monthLabel,
   pagerHash,
   pagerSearchIndex,
   parsePagerRoute,
+  monthRange,
   preparePager,
   profileOf,
   remarksOf,
@@ -375,4 +378,27 @@ test('adjectives before a nick describe the same person', () => {
   assert.ok(withAdjectives('Всегда ваша верная Лёля', 'Лёля'));
   assert.ok(!withAdjectives('Другой Kurdt', 'Kurdt'), '«другой» is someone else');
   assert.ok(!withAdjectives('Подруга Kurt', 'Kurt'), 'a relation is someone else');
+});
+
+test('the feed puts the newest issues first and keeps the printed order inside an issue', () => {
+  const ids = (list: { id: string }[]) => list.map((message) => message.id.split('-').at(-1));
+  assert.deepEqual(ids(inOrder(model.messages, 'old')), ids(model.messages));
+  const newest = inOrder(model.messages, 'new');
+  assert.deepEqual(newest.map((message) => message.date), model.messages.map((message) => message.date).sort().reverse());
+  const sameIssue = newest.filter((message) => message.issue === newest[0].issue);
+  assert.deepEqual(ids(sameIssue), ids(model.messages.filter((message) => message.issue === newest[0].issue)));
+});
+
+test('the date filter offers every month of the run, gaps and year ends included', () => {
+  assert.deepEqual(monthRange(['2001-02-07', '2000-11-01', '2000-12-27']), ['2000-11', '2000-12', '2001-01', '2001-02']);
+  assert.deepEqual(monthRange(['2000-03-29']), ['2000-03']);
+  assert.deepEqual(monthRange(['', 'декабрь']), []);
+});
+
+test('the date filter keeps months between its bounds; an empty bound is open', () => {
+  const months = (list: { date: string }[]) => [...new Set(list.map((message) => message.date.slice(0, 7)))];
+  assert.deepEqual(months(inRange(model.messages, '2000-02', '2000-03')), ['2000-02', '2000-03']);
+  assert.deepEqual(months(inRange(model.messages, '2000-03', '')), ['2000-03', '2000-04']);
+  assert.deepEqual(months(inRange(model.messages, '', '2000-01')), ['2000-01']);
+  assert.equal(inRange(model.messages, '', ''), model.messages);
 });
