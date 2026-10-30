@@ -110,7 +110,9 @@ export function splitArticles(articles: PagerArticle[]): PagerPiece[] {
 // Клеятся уже закрытые тексты (pager-public.mjs, после цензуры): каждый кусок закрыт решениями
 // своей полосы, а hold любого из них держит всё сообщение.
 type SeamMessage = { year: number; number: string; serial: string; sheet: number; text: string; from: string | null; to: string[]; byline: string | null; hold?: boolean; redactions?: unknown[] };
-export function joinSheetSeams<T extends SeamMessage>(messages: T[]): T[] {
+// Слово, собранное из половинок на стыке, цензура полос по отдельности не видела: onSeam получает
+// его (или два слова по обе стороны стыка), чтобы проверить ещё раз.
+export function joinSheetSeams<T extends SeamMessage>(messages: T[], onSeam?: (joined: T, seam: { text: string; word: boolean }) => void): T[] {
   const joined: T[] = [];
   for (const message of messages) {
     const last = joined[joined.length - 1];
@@ -118,7 +120,11 @@ export function joinSheetSeams<T extends SeamMessage>(messages: T[]): T[] {
     if (seam && /^[\p{Ll}…,;:–—]/u.test(message.text.trim()) && !/[.!?…)»"'”]\s*$/u.test(last.text)) {
       const head = last.text.trimEnd();
       const tail = message.text.trimStart();
-      last.text = /\p{L}-$/u.test(head) ? `${head.slice(0, -1)}${tail}` : `${head} ${tail}`;
+      const hyphen = /\p{L}-$/u.test(head);
+      last.text = hyphen ? `${head.slice(0, -1)}${tail}` : `${head} ${tail}`;
+      const before = /\S*$/u.exec(hyphen ? head.slice(0, -1) : head)![0];
+      const after = /^\S*/u.exec(tail)![0];
+      onSeam?.(last, { text: hyphen ? `${before}${after}` : `${before} ${after}`, word: hyphen });
       last.from ??= message.from;
       last.byline ??= message.byline;
       last.to = [...new Set([...last.to, ...message.to])];
