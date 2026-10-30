@@ -618,7 +618,8 @@ button, a { transition: background-color .15s, color .15s, border-color .15s; }
 .pg-profile h1 { font-size: 72px; font-weight: 800; letter-spacing: -2px; line-height: .9; overflow-wrap: anywhere; }
 .pg-back { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); }
 .pg-back:hover { color: var(--ink); }
-.pg-stats { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 12px 0; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); width: 100%; font-size: 14px; }
+/* Baseline: the date has no big number and would otherwise sit at the top of the row. */
+.pg-stats { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; padding: 12px 0; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); width: 100%; font-size: 14px; }
 .pg-stats b { font: 800 22px 'Roboto Condensed', sans-serif; margin-right: 2px; }
 .pg-stats > span { display: inline-flex; align-items: baseline; gap: 4px; }
 /* Lines are 1px gaps over the ink: when five tabs do not fit the column they wrap and the last
