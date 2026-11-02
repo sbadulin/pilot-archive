@@ -54,9 +54,7 @@ h1, h2, h3 { font-family: var(--headline); }
   text-align: center;
   text-wrap: balance;
 }
-.archive-title h1 .nowrap { white-space: nowrap; }
-.strip-break { display: none; }
-.archive-title h1 > span {
+.archive-title h1 > span:not(.visually-hidden) {
   background: var(--paper);
   padding: 2px 12px;
   -webkit-box-decoration-break: clone;
@@ -163,8 +161,6 @@ h1, h2, h3 { font-family: var(--headline); }
   .about-section h2, .creators-heading h2 { font-size: 24px; }
   .about-section > div:nth-child(2) { column-count: 1; }
   .archive-title h1 { font-size: 14px; }
-  .strip-sep { display: none; }
-  .strip-break { display: inline; }
   .year-summary .black-label { display: none; }
 }
 @media (max-width: 540px) {
