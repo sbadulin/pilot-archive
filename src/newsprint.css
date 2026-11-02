@@ -1,0 +1,167 @@
+/*
+ * Experiment: the archive page set like the paper itself. Everything here comes from
+ * the 2000 issues: slogan strip, hatched date strip, rubric over a tall condensed
+ * headline, justified serif body, bylines with the surname in capitals.
+ * Audit and passes follow unslop by Damir Sokolovsky (@heydamir), CC BY 4.0.
+ */
+:root {
+  --paper: #f4eee0;
+  --grid: #dcd6c5;
+  --line: #c9c2af;
+  --muted: #5f5b50;
+  --accent: #d8cfb8;
+  --secondary: #eae3d2;
+  --ring: var(--ink);
+  --headline: 'Oswald', 'Arial Narrow', Impact, sans-serif;
+  --body: 'PT Serif', Georgia, 'Times New Roman', serif;
+  --hatch: repeating-linear-gradient(0deg, var(--ink) 0 1px, transparent 1px 4px);
+  --hatch-light: repeating-linear-gradient(0deg, #17181466 0 1px, transparent 1px 3px);
+  font-family: Arial, Helvetica, sans-serif;
+}
+:focus-visible { outline-color: var(--ink); }
+h1, h2, h3 { font-family: var(--headline); }
+
+/* Slogan strip over the masthead: a black band, a different saying in every issue. */
+.slogan-strip {
+  margin-top: 24px;
+  padding: 6px 16px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+/* The site logo stays as it was; only its surroundings follow the paper. */
+.masthead { margin-top: 0; }
+.masthead-description { border-left-color: var(--ink); }
+.masthead-description .black-label { align-self: flex-start; text-transform: uppercase; }
+.masthead-description p { font-family: var(--body); }
+.archive-dates { font-family: var(--headline); font-weight: 700; letter-spacing: 0; }
+
+/* Date strip: a line of text knocked out of a hatched band. */
+.archive-title { padding: 16px 0; }
+.archive-title h1 {
+  flex: 1;
+  background: var(--hatch);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.5;
+  text-align: center;
+  text-wrap: balance;
+}
+.archive-title h1 span {
+  background: var(--paper);
+  padding: 2px 12px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+/* Rubric: small bold words on a light hatch. A black box is kept for the masthead only. */
+.black-label {
+  padding: 2px 8px;
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.4;
+}
+.year-summary .black-label,
+.about-section .black-label,
+.creators-heading .black-label {
+  display: block;
+  background: var(--hatch-light);
+  color: var(--ink);
+  text-shadow: 0 0 3px var(--paper), 0 0 3px var(--paper), 0 0 3px var(--paper);
+}
+
+/* Years: boxes like the «1 рубль» and «№» cells. Years without issues step back. */
+.year-picker a {
+  font-family: var(--headline);
+  font-weight: 600;
+}
+.year-picker a.has-issues { background: none; box-shadow: inset 0 0 0 1px var(--ink); }
+.year-picker a:not(.has-issues) { color: var(--muted); font-weight: 400; }
+.year-picker a:hover { background: var(--hatch-light); }
+.year-picker a.selected, .year-picker a.selected:hover { background: var(--ink); color: var(--paper); }
+
+/* The year's file. */
+.year-summary h2 { font-weight: 700; letter-spacing: 0; }
+.year-summary > p { font-family: var(--body); font-weight: 400; }
+.archive-note { border-left: 0; padding-left: 0; margin-top: 32px; }
+.archive-note p { font-family: var(--body); font-size: 15px; font-weight: 400; line-height: 1.4; }
+
+/* Covers lie directly on the page, no card behind them. */
+.cover-frame { background: none; border: 0; padding: 0; }
+.cover-frame > img { filter: drop-shadow(1px 2px 3px #0003); }
+.issue-meta { padding-top: 10px; border-bottom: 1px solid var(--ink); padding-bottom: 8px; row-gap: 2px; }
+.issue-meta h3 { font-size: 24px; font-weight: 600; letter-spacing: 0; }
+.issue-meta h3 span { font-size: 18px; font-weight: 400; }
+.issue-meta time { grid-column: 1 / -1; font-size: 13px; font-weight: 700; }
+.issue-format { grid-column: 1 / -1; font-size: 12px; }
+.issue-arrow { height: 32px; width: 32px; }
+
+@media (min-width: 1101px) {
+  .issue-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px 28px; }
+}
+
+/* Article sections: rubric, tall capitals, justified columns. */
+.about-section h2, .creators-heading h2 {
+  font-size: 44px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+.about-section p, .about-section p + p {
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.45;
+  hyphens: auto;
+  text-align: justify;
+  text-indent: 1.5em;
+}
+.about-section > div:nth-child(2) {
+  column-count: 2;
+  column-gap: 32px;
+  column-rule: 1px solid var(--ink);
+}
+.about-section p + p { margin-top: 0; }
+.about-section aside p { text-indent: 0; text-align: left; }
+.creators-heading p { font-family: var(--body); color: var(--ink); }
+.creator-list strong { font-family: inherit; font-size: 16px; }
+.creator-list .surname { font-style: normal; text-transform: uppercase; }
+.creator-link:hover span, .creator-link:focus-visible span { background: var(--accent); }
+.about-section, .creators-section { border-top: 5px solid var(--ink); }
+.site-footer { border-top: 3px double var(--ink); }
+
+/* Age gate speaks in the same voice. */
+.age-gate h1 { font-weight: 700; text-transform: uppercase; }
+
+.about-section h2 { font-size: 36px; }
+@media (min-width: 1101px) {
+  .about-section { grid-template-columns: 300px 1fr 270px; }
+  .about-section:not(:has(aside)) { grid-template-columns: 300px 1fr; }
+}
+@media (max-width: 1100px) {
+  .about-section h2 { font-size: 24px; }
+  .creators-heading h2 { font-size: 36px; }
+}
+@media (max-width: 800px) {
+  .about-section h2, .creators-heading h2 { font-size: 24px; }
+  .about-section > div:nth-child(2) { column-count: 1; }
+  .archive-title h1 { font-size: 14px; }
+  .year-summary .black-label { display: none; }
+}
+@media (max-width: 540px) {
+  .slogan-strip { margin-top: 16px; padding: 4px 8px; font-size: 11px; }
+  .masthead { margin-top: 0; }
+  .archive-title h1 { font-size: 13px; }
+  .about-section h2, .creators-heading h2 { font-size: 36px; }
+  .issue-meta h3 { font-size: 20px; }
+  .issue-meta h3 span { font-size: 15px; }
+  .issue-meta time { font-size: 12px; }
+}
