@@ -1977,7 +1977,8 @@ export default function Home() {
           </section>
           <div className="archive-title">
             <h1>
-              <span>Архив газеты • Комсомольск-на-Амуре • Выходила с 10.10.96</span>
+              <span className="visually-hidden">Архив газеты «Первый Пилот». </span>
+              <span>Выходила с 10.10.96</span>
             </h1>
             <div className="archive-title-side">
               <span>{issueCountLabel(archiveIssues.length)} в архиве</span>

@@ -54,7 +54,7 @@ h1, h2, h3 { font-family: var(--headline); }
   text-align: center;
   text-wrap: balance;
 }
-.archive-title h1 span {
+.archive-title h1 > span:not(.visually-hidden) {
   background: var(--paper);
   padding: 2px 12px;
   -webkit-box-decoration-break: clone;
@@ -137,6 +137,13 @@ h1, h2, h3 { font-family: var(--headline); }
 .creator-link:hover span, .creator-link:focus-visible span { background: var(--accent); }
 .about-section, .creators-section { border-top: 5px solid var(--ink); }
 .site-footer { border-top: 3px double var(--ink); }
+
+/* Reader: the same warm paper around the scans, one step darker so the sheets stand out. */
+.sheet-viewport { background: #d9d0ba; }
+.thumbnails { background: var(--secondary); }
+.thumbnail:hover { background: #e0d8c4; }
+.thumbnail.selected { background: #d9d0ba; }
+.tool-button:hover:not(:disabled), .tool-button.pressed { background: #e0d8c4; }
 
 /* Age gate speaks in the same voice. */
 .age-gate h1 { font-weight: 700; text-transform: uppercase; }
