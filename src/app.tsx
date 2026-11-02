@@ -1,5 +1,6 @@
 "use client";
 
+import {pickSlogan} from "./slogans";
 import {
   lazy,
   Suspense,
@@ -100,6 +101,23 @@ const issueCountLabel = (count: number) => {
     return `${count} выпуска`;
   return `${count} выпусков`;
 };
+
+// A different saying from a real cover on every visit, as each issue had its own.
+function SloganStrip() {
+  const [slogan] = useState(() => pickSlogan());
+  return (
+    <p className="slogan-strip" title={`С обложки ${slogan.issue}`}>
+      {slogan.text}
+    </p>
+  );
+}
+
+// The paper's own date line: «5 января 2000 года, среда».
+const weekdays = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
+function runningDate(issue: {date: string; dateLabel: string}) {
+  const day = new Date(`${issue.date}T12:00:00`).getDay();
+  return Number.isNaN(day) ? issue.dateLabel : `${issue.dateLabel} года, ${weekdays[day]}`;
+}
 
 function Brand({small = false, year = 2000}: {small?: boolean; year?: number}) {
   return (
@@ -1942,6 +1960,7 @@ export default function Home() {
         </Suspense>
       ) : (
         <main id="main" className="shell archive-page">
+          <SloganStrip />
           <section className="masthead">
             <div className="masthead-brand">
               <Brand year={year} />
@@ -1958,8 +1977,7 @@ export default function Home() {
           </section>
           <div className="archive-title">
             <h1>
-              Газета осталась.
-              <br className="mobile-break" /> Время можно перелистать.
+              <span>Архив газеты • Комсомольск-на-Амуре • Выходила с 10.10.96</span>
             </h1>
             <div className="archive-title-side">
               <span>{issueCountLabel(archiveIssues.length)} в архиве</span>
@@ -2008,11 +2026,11 @@ export default function Home() {
             aria-label={`Выпуски за ${year} год`}
           >
             <aside className="year-summary">
-              <span className="black-label">Год за годом</span>
+              <span className="black-label">Подшивка</span>
               <h2>{year}</h2>
               <p>
                 {yearMonths
-                  ? `${yearMonths} ${year} года.`
+                  ? `${yearMonths} ${year} года`
                   : "Этот год ещё ждёт своих выпусков."}
               </p>
               <div className="year-total">
@@ -2024,15 +2042,7 @@ export default function Home() {
                   : "Нет загруженных выпусков"}
               </div>
               <div className="archive-note">
-                <p>
-                  Читаем газету такой,
-                  <br />
-                  какой она выходила.
-                </p>
-                <span>
-                  Обложки и все страницы
-                  <br />в исходных материалах выпуска.
-                </span>
+                <p>Обложки и все страницы выпуска</p>
               </div>
             </aside>
             {archiveIssues.some((issue) => issue.year === year) ? (
@@ -2071,9 +2081,9 @@ export default function Home() {
                         >
                           <ArrowRight size={24} />
                         </a>
-                        <time dateTime={issue.date}>{issue.dateLabel}</time>
+                        <time dateTime={issue.date}>{runningDate(issue)}</time>
                         <span className="issue-format">
-                          PDF · {issue.pages} страниц
+                          PDF · {issue.pages} стр.
                         </span>
                       </div>
                     </article>
@@ -2111,20 +2121,17 @@ export default function Home() {
           <section className="about-section" id="about">
             <div>
               <span className="black-label">О газете</span>
-              <h2>
-                Свой город. <br />
-                Своё поколение.
-              </h2>
+              <h2>Молодёжный еженедельник</h2>
             </div>
             <div>
               <p>
-                «Первый Пилот» — молодёжная газета Комсомольска-на-Амуре. Здесь
+                «Первый Пилот» – молодёжная газета Комсомольска-на-Амуре. Здесь
                 собираем выпуски за 1996–2007 годы, чтобы их снова можно было
                 читать.
               </p>
               <p>
                 В выпусках газеты: городские новости, музыка, кино, письма
-                читателей и телепрограмма. Газета остаётся целиком — вместе с
+                читателей и телепрограмма. Газета остаётся целиком – вместе с
                 рекламой и кроссвордами.
               </p>
             </div>
@@ -2153,11 +2160,7 @@ export default function Home() {
           >
             <div className="creators-heading">
               <span className="black-label">Люди «Пилота»</span>
-              <h2 id="creators-title">
-                Газету делали
-                <br />
-                сами люди.
-              </h2>
+              <h2 id="creators-title">Кто делал газету</h2>
               <p>
                 Имена людей, связанных с газетой. Состав постепенно уточняем по
                 сохранившимся номерам и воспоминаниям.
@@ -2165,73 +2168,73 @@ export default function Home() {
             </div>
             <div className="creator-list">
               <article>
-                <strong>Олеся Луконина</strong>
+                <strong>Олеся <i className="surname">Луконина</i></strong>
               </article>
               <article>
-                <strong>Константин Луконин</strong>
+                <strong>Константин <i className="surname">Луконин</i></strong>
               </article>
               <article>
-                <strong>Павел Трутнев</strong>
+                <strong>Павел <i className="surname">Трутнев</i></strong>
               </article>
               <article>
-                <strong>Александр Бочкарев</strong>
+                <strong>Александр <i className="surname">Бочкарев</i></strong>
               </article>
               <article>
-                <strong>Вадим Горуленко</strong>
+                <strong>Вадим <i className="surname">Горуленко</i></strong>
               </article>
               <article>
-                <strong>Ульяна Крикливая</strong>
+                <strong>Ульяна <i className="surname">Крикливая</i></strong>
               </article>
               <article>
-                <strong>Алексей Ларин</strong>
+                <strong>Алексей <i className="surname">Ларин</i></strong>
               </article>
               <article>
-                <strong>Светлана Безрукова</strong>
+                <strong>Светлана <i className="surname">Безрукова</i></strong>
               </article>
               <article>
-                <strong>Наталья Останина</strong>
+                <strong>Наталья <i className="surname">Останина</i></strong>
               </article>
               <article>
-                <strong>Ольга Харламова</strong>
+                <strong>Ольга <i className="surname">Харламова</i></strong>
               </article>
               <article>
-                <strong>Анна Сидорова</strong>
+                <strong>Анна <i className="surname">Сидорова</i></strong>
               </article>
               <article>
-                <strong>Сергей Долженко</strong>
+                <strong>Сергей <i className="surname">Долженко</i></strong>
               </article>
               <article>
-                <strong>Сергей Бадулин</strong>
+                <strong>Сергей <i className="surname">Бадулин</i></strong>
               </article>
               <article>
-                <strong>Марина Бабич</strong>
+                <strong>Марина <i className="surname">Бабич</i></strong>
               </article>
               <article>
-                <strong>Кирилл Маковеев</strong>
+                <strong>Кирилл <i className="surname">Маковеев</i></strong>
               </article>
               <article>
-                <strong>Александр Утюпин</strong>
+                <strong>Александр <i className="surname">Утюпин</i></strong>
               </article>
               <article>
-                <strong>Ирина Луконина</strong>
+                <strong>Ирина <i className="surname">Луконина</i></strong>
               </article>
               <article>
-                <strong>Леонид Шевченко</strong>
+                <strong>Леонид <i className="surname">Шевченко</i></strong>
               </article>
               <article>
-                <strong>Евгения Белоусова</strong>
+                <strong>Евгения <i className="surname">Белоусова</i></strong>
               </article>
               <article>
                 <a className="creator-link" href={authorHref("Захар Веселов")} onClick={(event) => openAuthor(event, "Захар Веселов")}>
-                  <strong>Захар Веселов</strong>
+                  <strong>Захар <i className="surname">Веселов</i></strong>
                   <span>рисунки и материалы</span>
                 </a>
               </article>
               <article>
-                <strong>Владимир Ерошенко</strong>
+                <strong>Владимир <i className="surname">Ерошенко</i></strong>
               </article>
               <article>
-                <strong>Дарья Демешко</strong>
+                <strong>Дарья <i className="surname">Демешко</i></strong>
               </article>
             </div>
           </section>
