@@ -1977,7 +1977,13 @@ export default function Home() {
           </section>
           <div className="archive-title">
             <h1>
-              <span>Архив газеты • Комсомольск-на-Амуре • Выходила с 10.10.96</span>
+              <span>
+                <span className="nowrap">Архив газеты</span> •{" "}
+                <span className="nowrap">Комсомольск-на-Амуре</span>
+                <span className="strip-sep"> • </span>
+                <br className="strip-break" />
+                <span className="nowrap">Выходила с 10.10.96</span>
+              </span>
             </h1>
             <div className="archive-title-side">
               <span>{issueCountLabel(archiveIssues.length)} в архиве</span>

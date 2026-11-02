@@ -54,7 +54,9 @@ h1, h2, h3 { font-family: var(--headline); }
   text-align: center;
   text-wrap: balance;
 }
-.archive-title h1 span {
+.archive-title h1 .nowrap { white-space: nowrap; }
+.strip-break { display: none; }
+.archive-title h1 > span {
   background: var(--paper);
   padding: 2px 12px;
   -webkit-box-decoration-break: clone;
@@ -138,6 +140,13 @@ h1, h2, h3 { font-family: var(--headline); }
 .about-section, .creators-section { border-top: 5px solid var(--ink); }
 .site-footer { border-top: 3px double var(--ink); }
 
+/* Reader: the same warm paper around the scans, one step darker so the sheets stand out. */
+.sheet-viewport { background: #d9d0ba; }
+.thumbnails { background: var(--secondary); }
+.thumbnail:hover { background: #e0d8c4; }
+.thumbnail.selected { background: #d9d0ba; }
+.tool-button:hover:not(:disabled), .tool-button.pressed { background: #e0d8c4; }
+
 /* Age gate speaks in the same voice. */
 .age-gate h1 { font-weight: 700; text-transform: uppercase; }
 
@@ -154,6 +163,8 @@ h1, h2, h3 { font-family: var(--headline); }
   .about-section h2, .creators-heading h2 { font-size: 24px; }
   .about-section > div:nth-child(2) { column-count: 1; }
   .archive-title h1 { font-size: 14px; }
+  .strip-sep { display: none; }
+  .strip-break { display: inline; }
   .year-summary .black-label { display: none; }
 }
 @media (max-width: 540px) {
