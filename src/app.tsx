@@ -1197,6 +1197,12 @@ function Upload({onBack}: {onBack: () => void}) {
           </button>
         )}
       </div>
+      {/* Until the queue loads, its section (which also shows queueError) is not rendered. */}
+      {!queue && queueError && (
+        <p className="form-error" role="alert">
+          Очередь не загрузилась: {queueError}
+        </p>
+      )}
       <ol className="steps" aria-label="Шаги добавления">
         {["Выбрать PDF", "Проверить данные", "Посмотреть страницы"].map(
           (title, i) => (
