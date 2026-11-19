@@ -123,11 +123,19 @@ async function readText(page) {
   const image = join(dir, `page-${pad(page)}.jpg`);
   await render(page, 200, image);
   const started = Date.now();
-  const { stdout } = await run(
-    'claude',
-    ['-p', prompt.replace('{{IMAGE}}', image), '--allowedTools', 'Read', '--output-format', 'json'],
-    { maxBuffer: 64 * 1024 * 1024, timeout: 15 * 60 * 1000 },
-  );
+  let stdout;
+  try {
+    ({ stdout } = await run(
+      'claude',
+      ['-p', prompt.replace('{{IMAGE}}', image), '--allowedTools', 'Read', '--output-format', 'json'],
+      { maxBuffer: 64 * 1024 * 1024, timeout: 15 * 60 * 1000 },
+    ));
+  } catch (error) {
+    // Плотный пейджер целиком не успевает за 15 минут (код 143). Помечаем полосу как неудачную,
+    // чтобы следующий прогон прочитал её по частям, а не упёрся в тот же таймаут.
+    await writeFile(join(dir, `failed-${pad(page)}.txt`), `claude -p failed: ${error.code ?? ''} ${error.message}`);
+    return `failed: ${error.killed ? 'timeout' : error.message}`;
+  }
   const response = JSON.parse(stdout);
   const sheet = { ...issue, sheet: page, printedPage: null, model: 'claude-code', durationMs: Date.now() - started };
   try {
