@@ -112,13 +112,6 @@ function SloganStrip() {
   );
 }
 
-// The paper's own date line: «5 января 2000 года, среда».
-const weekdays = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
-function runningDate(issue: {date: string; dateLabel: string}) {
-  const day = new Date(`${issue.date}T12:00:00`).getDay();
-  return Number.isNaN(day) ? issue.dateLabel : `${issue.dateLabel} года, ${weekdays[day]}`;
-}
-
 function Brand({small = false, year = 2000}: {small?: boolean; year?: number}) {
   return (
     <span className={small ? "brand brand-small" : "brand"}>
@@ -2082,7 +2075,7 @@ export default function Home() {
                         >
                           <ArrowRight size={24} />
                         </a>
-                        <time dateTime={issue.date}>{runningDate(issue)}</time>
+                        <time dateTime={issue.date}>{issue.dateLabel}</time>
                         <span className="issue-format">
                           PDF · {issue.pages} стр.
                         </span>
