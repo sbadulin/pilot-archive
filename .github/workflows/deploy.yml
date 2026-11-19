@@ -11,7 +11,7 @@ concurrency:
 jobs:
   check:
     name: Verify release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -33,7 +33,7 @@ jobs:
   selectel:
     name: Publish public frontend
     needs: check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: selectel-production
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.SELECTEL_ACCESS_KEY }}
@@ -54,7 +54,7 @@ jobs:
   cloudflare:
     name: Publish Pages admin
     needs: check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: cloudflare-production
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
