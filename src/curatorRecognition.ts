@@ -113,7 +113,13 @@ const publishOrWarn = (report: Report, prefix: string) =>
 // approval, the missed ones on a retry), then republish the site search.
 export async function retryRecognition(item: Submission, report: Report): Promise<string> {
   const result = await recognizeIssue(item, progressOf(item, report), true);
-  if (result.sheets === 0) return `${isSpecial(item) ? "В спецвыпуске" : `В № ${item.number}`} все листы уже распознаны.`;
+  if (result.sheets === 0) {
+    // An issue staged with scripts/stage-issue.sh arrives with its bylines already in D1
+    // (scripts/local-credits.mjs): nothing to recognize, but the search still has to learn
+    // about the issue now that it is approved.
+    await publishOrWarn(report, "Подписи уже есть, но поиск на сайте не обновился");
+    return `${isSpecial(item) ? "В спецвыпуске" : `В № ${item.number}`} все листы уже распознаны; поиск на сайте обновлён.`;
+  }
   const message = `${issueShortLabel(item)}: ${recognitionSummary(result)}`;
   report.progress(message);
   // Nothing new to publish when recognition stopped or found nothing.
