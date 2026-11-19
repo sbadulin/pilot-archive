@@ -81,7 +81,9 @@ export function sheetResult(
     .map((entry) => ({ kind: entry.kind, title: entry.title, byline: entry.byline, authors: authors[entry.id] ?? [] }))
     // No clean name means the byline was not a person («От ред.» is still one: the model keeps it).
     .filter((article) => article.authors.length > 0);
+  // The raw caption is checked too: the model puts names in the nominative, a closure keeps the printed case.
   const found = captionEntries(sheetNo, sheet)
+    .filter((entry) => !isClosed(sheetNo, null, entry.text, closures))
     .flatMap((entry) => credits[entry.id] ?? [])
     .filter((credit) => !isClosed(sheetNo, null, credit.name, closures));
   return { pageType, articles, credits: found };

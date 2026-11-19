@@ -57,6 +57,12 @@ test('the stored sheet reads like an approval recognition', () => {
   assert.deepEqual(credits.map((credit) => [credit.kind, credit.name]), [['article', 'ЛЯНА'], ['letter', 'Тарас'], ['photo', 'Иван Петров']]);
 });
 
+test('a closed name in a caption stays out even after the model changes its case', () => {
+  const closures = closuresFrom([{ sheet: 3, find: 'Ивана Петрова', approved: true }]);
+  const result = sheetResult(3, sheet, closures, {}, { '3-3': [{ kind: 'photo', name: 'Иван Петров' }] });
+  assert.deepEqual(result.credits, []);
+});
+
 test('a byline without a clean name is dropped instead of becoming a name', () => {
   const result = sheetResult(3, sheet, [], { '3-0': [] }, {});
   assert.deepEqual(result.articles, []);
