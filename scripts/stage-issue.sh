@@ -2,8 +2,9 @@
 # Puts a new, already redacted issue in the curator queue without the browser upload, which
 # fails from abroad (see docs/PUBLISHING.md). The original goes to originals/ in the private
 # bucket, the public version and its cover to the pending keys, and only then a 'pending' row
-# is added to D1. The curator clicks «Одобрить» in the admin: the Worker copies the file to the
-# public bucket, rewrites the manifest, and the browser recognizes the authors.
+# is added to D1, with the author bylines taken from the local recognition (local-credits.mjs).
+# The curator clicks «Одобрить» in the admin: the Worker copies the file to the public bucket and
+# rewrites the manifest, and the browser only republishes the author search.
 #
 #   bash scripts/stage-issue.sh "$HOME/Downloads/Reading/pilot-archive/ПП №33(0098)-16.08.2000.pdf"
 #
@@ -66,4 +67,8 @@ npx wrangler d1 execute pilot_archive --remote --command "INSERT INTO issue_subm
   (id, year, number, serial, date, date_label, filename, pages, storage_key, status, submitted_by, created_at, updated_at)
   VALUES ('$id', $year, '$num', '$serial', '$date', '$label', '${name//\'/\'\'}', $pages,
           'submissions/$year/$slug/$id.pdf', 'pending', '$submitter', '$now', '$now')" >/dev/null
+# Bylines from the local recognition: «Одобрить» then finds every sheet recognized and only
+# updates the search. If this fails, approval recognizes the sheets itself, as before.
+node --experimental-strip-types "$here/local-credits.mjs" "$original" --apply | grep -v '^  ' ||
+  echo "Local bylines not written; «Одобрить» will recognize the sheets itself." >&2
 echo "№$num($serial) от $label ждёт одобрения в админке (id $id, $pages стр.)."
