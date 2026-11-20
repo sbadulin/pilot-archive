@@ -20,6 +20,8 @@
 //   - решение, не найденное ни в сообщениях, ни в других материалах полосы, — в review, а
 //     сообщения этой полосы получают hold: true (не публиковать до проверки);
 //   - find нашёлся в тексте реже, чем tesseract на полосе, — в review и hold;
+//   - решение с pagerChecked: "почему" (проверено человеком: в тексте закрывать нечего) при
+//     ненаходке не держит соседей, а попадает в review как checked-by-hand;
 //   - область, у которой не нашлось начало или конец, закрывается в задетых сообщениях
 //     целиком и попадает в review;
 //   - слово, закрытое в тексте, закрывается и в подписи и адресатах (похожее написание тоже);
@@ -82,7 +84,7 @@ const compact = text => normToken(text ?? '').replace(/[^\p{L}\p{N}]/gu, '');
 const review = [];
 const unreviewedIssues = [];
 const hits = [];
-const stats = { decisions: 0, located: 0, otherArticles: 0, ambiguous: 0 };
+const stats = { decisions: 0, located: 0, otherArticles: 0, ambiguous: 0, checked: 0 };
 const publicIndex = [];
 
 for (const [issue, messages] of byIssue) {
@@ -343,7 +345,13 @@ for (const [issue, messages] of byIssue) {
       if (item.byQuote) flag(item, 'box-by-quote', { tesseract: item.tesseract, closed: item.byQuote.map(state => state.message.id) }, []);
       else if (item.partial) flag(item, 'box-partial', { matched: item.partial, tesseract: item.tesseract }, item.closedIn);
     } else if (other) stats.otherArticles += 1;
-    else flag(item, 'not-found', item.tesseract !== undefined ? { tesseract: item.tesseract } : {}, item.hold ?? sheetStates(item.sheet));
+    // pagerChecked — человек проверил, что в тексте сообщений закрывать нечего: хвост переноса,
+    // уже закрытый основным решением, или сообщение, которого нет в распознанном тексте.
+    // Тогда соседние сообщения не держим, а решение остаётся в review для контроля.
+    else if (item.pagerChecked) {
+      stats.checked += 1;
+      flag(item, 'checked-by-hand', { note: item.pagerChecked }, []);
+    } else flag(item, 'not-found', item.tesseract !== undefined ? { tesseract: item.tesseract } : {}, item.hold ?? sheetStates(item.sheet));
   }
 
   // Общие правила по фамилии — в тексте, подписи и адресатах.
@@ -435,7 +443,7 @@ const problemText = {
 const md = [
   '# Пейджер: проверка цензуры',
   '',
-  `Сообщений: ${publicIndex.length}, с закрытыми местами: ${redactedMessages}, на удержании (hold — не публиковать до проверки): ${held}. Решений на полосах пейджера: ${stats.decisions}, найдено в тексте: ${stats.located}, относятся к другим материалам полосы: ${stats.otherArticles}, неоднозначных плашек: ${stats.ambiguous}.`,
+  `Сообщений: ${publicIndex.length}, с закрытыми местами: ${redactedMessages}, на удержании (hold — не публиковать до проверки): ${held}. Решений на полосах пейджера: ${stats.decisions}, найдено в тексте: ${stats.located}, относятся к другим материалам полосы: ${stats.otherArticles}, неоднозначных плашек: ${stats.ambiguous}, проверено вручную (pagerChecked): ${stats.checked}.`,
   '',
   ...(unreviewedIssues.length ? [`## Выпуски без решений цензуры (${unreviewedIssues.length}) — в публичный файл не попали`, '', ...unreviewedIssues.map(item => `- ${item.issue}: ${item.messages} сообщений (${item.error})`), ''] : []),
   `## Решения (${review.length})`,
@@ -451,5 +459,5 @@ const md = [
 ].join('\n');
 await writeFile(join(cacheRoot, 'pager-review.md'), md);
 console.log(
-  `Pager public: ${publicIndex.length} messages, ${redactedMessages} with redactions, ${held} held; decisions ${stats.decisions}, located ${stats.located}, other articles ${stats.otherArticles}, ambiguous ${stats.ambiguous}; review ${JSON.stringify(problems)}; unreviewed issues ${unreviewedIssues.length}; scanner hits ${hits.length} (${hits.filter(hit => hit.status === 'new').length} new) → ${join(cacheRoot, 'pager-public.json')}`,
+  `Pager public: ${publicIndex.length} messages, ${redactedMessages} with redactions, ${held} held; decisions ${stats.decisions}, located ${stats.located}, other articles ${stats.otherArticles}, ambiguous ${stats.ambiguous}, checked by hand ${stats.checked}; review ${JSON.stringify(problems)}; unreviewed issues ${unreviewedIssues.length}; scanner hits ${hits.length} (${hits.filter(hit => hit.status === 'new').length} new) → ${join(cacheRoot, 'pager-public.json')}`,
 );
