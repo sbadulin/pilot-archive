@@ -6,12 +6,14 @@
 // Read (картинки полос) или вовсе ничего, поэтому всё остальное отключаем: накладные падают
 // примерно до 5 тыс. токенов, промпт тот же.
 //
-// Модель по умолчанию — Sonnet: на полосе № 47 (2000) он прочитал те же 1208 слов из 1210,
-// что и Opus (словарь совпал на 99 %), а лимит тратит заметно медленнее. Другую модель задаёт
-// PILOT_CLAUDE_MODEL (например, opus для полосы, которую Sonnet прочитал плохо).
+// Модель по умолчанию — Opus. Sonnet пробовали (№ 47–52 за 2000 год): обычную полосу он читает
+// не хуже, но 5 полос из 22 сократил — «[продолжение не приводится]» в перепечатке и
+// «[неразборчиво]» на целом пейджере. Экономия при этом мала (около $0.13 за полосу против
+// $0.13–0.19 у Opus без MCP): главное сберегают флаги ниже, а не модель. Другую модель задаёт
+// PILOT_CLAUDE_MODEL.
 
 const EMPTY_MCP = JSON.stringify({ mcpServers: {} });
-export const CLAUDE_MODEL = process.env.PILOT_CLAUDE_MODEL || 'sonnet';
+export const CLAUDE_MODEL = process.env.PILOT_CLAUDE_MODEL || 'opus';
 
 /** @param {string} prompt @param {{ read?: boolean }} [options] */
 export function claudeArgs(prompt, { read = false } = {}) {

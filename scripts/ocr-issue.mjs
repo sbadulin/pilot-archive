@@ -14,6 +14,7 @@ import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { homedir } from 'node:os';
 import { claudeArgs } from './claude-cli.mjs';
+import { isShortened, sheetCoverage } from './ocr-coverage.mjs';
 
 const run = promisify(execFile);
 const args = process.argv.slice(2);
@@ -165,11 +166,25 @@ async function readWords(page) {
   await rm(image);
 }
 
+// Свежий ответ, в котором нет и трети слов tesseract, — сокращение, а не перепечатка: убираем
+// его в failed-NN.txt, и следующий прогон прочитает полосу по частям.
+async function checkCoverage(page, text) {
+  const out = join(dir, `sheet-${pad(page)}.json`);
+  const sheet = JSON.parse(await readFile(out, 'utf8'));
+  const check = sheetCoverage(sheet.result, await readFile(join(dir, `words-${pad(page)}.tsv`), 'utf8'));
+  if (!isShortened(check)) return text;
+  const note = `shortened: ${(check.coverage * 100).toFixed(0)}% of ${check.words} tesseract words`;
+  await writeFile(join(dir, `failed-${pad(page)}.txt`), `${note}\n\n${JSON.stringify(sheet, null, 2)}`);
+  await rm(out);
+  return `failed: ${note}`;
+}
+
 const queue = [...pages];
 await Promise.all(
   Array.from({ length: Math.min(jobs, queue.length) }, async () => {
     for (let page = queue.shift(); page !== undefined; page = queue.shift()) {
-      const [text] = await Promise.all([readText(page), readWords(page)]);
+      let [text] = await Promise.all([readText(page), readWords(page)]);
+      if (text.startsWith('ok')) text = await checkCoverage(page, text);
       console.log(`page ${pad(page)}: ${text}`);
     }
   }),
