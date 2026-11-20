@@ -16,6 +16,7 @@ import { promisify } from 'node:util';
 import { access, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { claudeArgs } from './claude-cli.mjs';
 import { isGlued, messageId, splitArticles } from '../src/pager.ts';
 
 const run = promisify(execFile);
@@ -93,7 +94,7 @@ async function label(task) {
       labels.push(...done.labels);
       continue;
     }
-    const { stdout } = await run('claude', ['-p', prompt(input), '--output-format', 'json'], { maxBuffer: 64 * 1024 * 1024, timeout: 15 * 60 * 1000 });
+    const { stdout } = await run('claude', claudeArgs(prompt(input)), { maxBuffer: 64 * 1024 * 1024, timeout: 15 * 60 * 1000 });
     const response = JSON.parse(stdout);
     if (response.is_error) throw new Error(`${task.issue}/${task.file}: ${response.result}`);
     const chunk = parseArray(response.result);

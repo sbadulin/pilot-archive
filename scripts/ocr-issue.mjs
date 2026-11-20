@@ -13,6 +13,7 @@ import { promisify } from 'node:util';
 import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { homedir } from 'node:os';
+import { claudeArgs } from './claude-cli.mjs';
 
 const run = promisify(execFile);
 const args = process.argv.slice(2);
@@ -83,7 +84,7 @@ async function readTextInStrips(page) {
     const strip = join(dir, `page-${pad(page)}-strip${index + 1}.jpg`);
     await run('magick', [full, '-crop', `${Math.round((right - left) * width)}x${height}+${Math.round(left * width)}+0`, '+repage', '-quality', '88', strip]);
     const note = `\n\nЭто вертикальная полоса ${index + 1} из ${STRIPS} одной газетной полосы (от ${Math.round(left * 100)}% до ${Math.round(right * 100)}% ширины), полное разрешение. Перепиши только материалы, которые целиком или в основном находятся в этой полосе; материалы, обрезанные краем, пропусти — их перепишут из соседней полосы. Рамки box указывай в процентах ЭТОЙ полосы.`;
-    const { stdout } = await run('claude', ['-p', prompt.replace('{{IMAGE}}', strip) + note, '--allowedTools', 'Read', '--output-format', 'json'], { maxBuffer: 64 * 1024 * 1024, timeout: 15 * 60 * 1000 });
+    const { stdout } = await run('claude', claudeArgs(prompt.replace('{{IMAGE}}', strip) + note, { read: true }), { maxBuffer: 64 * 1024 * 1024, timeout: 15 * 60 * 1000 });
     const response = JSON.parse(stdout);
     if (response.is_error) throw new Error(response.result);
     const result = parseJson(response.result);
@@ -127,7 +128,7 @@ async function readText(page) {
   try {
     ({ stdout } = await run(
       'claude',
-      ['-p', prompt.replace('{{IMAGE}}', image), '--allowedTools', 'Read', '--output-format', 'json'],
+      claudeArgs(prompt.replace('{{IMAGE}}', image), { read: true }),
       { maxBuffer: 64 * 1024 * 1024, timeout: 15 * 60 * 1000 },
     ));
   } catch (error) {
@@ -137,7 +138,7 @@ async function readText(page) {
     return `failed: ${error.killed ? 'timeout' : error.message}`;
   }
   const response = JSON.parse(stdout);
-  const sheet = { ...issue, sheet: page, printedPage: null, model: 'claude-code', durationMs: Date.now() - started };
+  const sheet = { ...issue, sheet: page, printedPage: null, model: 'claude-code', modelId: Object.keys(response.modelUsage ?? {})[0] ?? null, durationMs: Date.now() - started, usage: response.usage, costUsd: response.total_cost_usd };
   try {
     if (response.is_error) throw new Error(response.result);
     const result = parseJson(response.result);
