@@ -31,8 +31,11 @@ const jobs = Number(option('jobs', '2'));
 const dryRun = args.includes('--dry-run');
 const exists = path => access(path).then(() => true, () => false);
 
+// На обычной полосе пейджер узнаём по рубрике («Pager • Пейджер» в начале 2000 года), а не по
+// заголовку: статьи о пейджере («По страницам «Пейджера»» в № 47 и 52) и плашки вроде
+// «Пользователь «Пейджера»!!! ПОМНИ!» — не сообщения.
 const isPager = (sheet, article) =>
-  sheet.result?.pageType === 'pager' || /пейджер|pager/i.test(`${article.rubric ?? ''} ${article.title ?? ''}`);
+  sheet.result?.pageType === 'pager' || /пейджер|pager/i.test(article.rubric ?? '');
 
 const prompt = messages => `Ниже сообщения из рубрики «Пейджер» молодёжной газеты 2000 года (JSON: i — номер, title — заголовок, если есть, text — текст, byline — подпись, если отделена).
 Для каждого сообщения определи:
