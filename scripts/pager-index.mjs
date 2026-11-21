@@ -16,6 +16,7 @@ import { promisify } from 'node:util';
 import { access, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { claudeArgs } from './claude-cli.mjs';
 import { isGlued, messageId, splitArticles } from '../src/pager.ts';
 
 const run = promisify(execFile);
@@ -30,8 +31,11 @@ const jobs = Number(option('jobs', '2'));
 const dryRun = args.includes('--dry-run');
 const exists = path => access(path).then(() => true, () => false);
 
+// На обычной полосе пейджер узнаём по рубрике («Pager • Пейджер» в начале 2000 года), а не по
+// заголовку: статьи о пейджере («По страницам «Пейджера»» в № 47 и 52) и плашки вроде
+// «Пользователь «Пейджера»!!! ПОМНИ!» — не сообщения.
 const isPager = (sheet, article) =>
-  sheet.result?.pageType === 'pager' || /пейджер|pager/i.test(`${article.rubric ?? ''} ${article.title ?? ''}`);
+  sheet.result?.pageType === 'pager' || /пейджер|pager/i.test(article.rubric ?? '');
 
 const prompt = messages => `Ниже сообщения из рубрики «Пейджер» молодёжной газеты 2000 года (JSON: i — номер, title — заголовок, если есть, text — текст, byline — подпись, если отделена).
 Для каждого сообщения определи:
@@ -93,7 +97,7 @@ async function label(task) {
       labels.push(...done.labels);
       continue;
     }
-    const { stdout } = await run('claude', ['-p', prompt(input), '--output-format', 'json'], { maxBuffer: 64 * 1024 * 1024, timeout: 15 * 60 * 1000 });
+    const { stdout } = await run('claude', claudeArgs(prompt(input)), { maxBuffer: 64 * 1024 * 1024, timeout: 15 * 60 * 1000 });
     const response = JSON.parse(stdout);
     if (response.is_error) throw new Error(`${task.issue}/${task.file}: ${response.result}`);
     const chunk = parseArray(response.result);

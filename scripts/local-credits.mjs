@@ -13,6 +13,7 @@ import { promisify } from 'node:util';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { homedir } from 'node:os';
+import { claudeArgs } from './claude-cli.mjs';
 import { spreadSheets } from './spreads.mjs';
 import { printedPages } from '../src/readerLayout.ts';
 import { creditId, creditsFromSheet } from '../src/authorNames.ts';
@@ -63,7 +64,7 @@ ${JSON.stringify({ bylines: bylines.map(({ id, title, byline }) => ({ id, title,
 
 let answer = { authors: {}, credits: {} };
 if (bylines.length || captions.length) {
-  const { stdout } = await run('claude', ['-p', prompt, '--output-format', 'json'], { maxBuffer: 16 * 1024 * 1024, timeout: 10 * 60 * 1000 });
+  const { stdout } = await run('claude', claudeArgs(prompt), { maxBuffer: 16 * 1024 * 1024, timeout: 10 * 60 * 1000 });
   const response = JSON.parse(stdout);
   if (response.is_error) throw new Error(response.result);
   const body = String(response.result).trim().replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
